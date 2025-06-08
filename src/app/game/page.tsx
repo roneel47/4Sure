@@ -28,7 +28,7 @@ export default function GamePage() {
   
   const [players, setPlayers] = useState<Player[]>([]);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState<number>(0);
-  const [currentTargetIndex, setCurrentTargetIndex] = useState<number>(0); // Player whose code is being guessed
+  const [currentTargetIndex, setCurrentTargetIndex] = useState<number>(0); 
   
   const [winner, setWinner] = useState<Player | null>(null);
   const [isGameEndDialogOpen, setIsGameEndDialogOpen] = useState(false);
@@ -37,11 +37,21 @@ export default function GamePage() {
 
   const gameModeRef = useRef(activeGameData?.gameMode);
   const numPlayersRef = useRef(activeGameData?.players?.length);
-  const playersRef = useRef(players); // Ref to access current players in callbacks
+  const playersRef = useRef(players);
+  const currentPlayerIndexRef = useRef(currentPlayerIndex);
+  const currentTargetIndexRef = useRef(currentTargetIndex);
 
   useEffect(() => {
     playersRef.current = players;
   }, [players]);
+
+  useEffect(() => {
+    currentPlayerIndexRef.current = currentPlayerIndex;
+  }, [currentPlayerIndex]);
+
+  useEffect(() => {
+    currentTargetIndexRef.current = currentTargetIndex;
+  }, [currentTargetIndex]);
 
   useEffect(() => {
     gameModeRef.current = activeGameData?.gameMode;
@@ -58,17 +68,14 @@ export default function GamePage() {
     }
     
     setPlayers(activeGameData.players);
-    setCurrentPlayerIndex(0); // Host/first player usually starts
+    setCurrentPlayerIndex(0); 
 
-    // Determine initial target
     if (activeGameData.gameMode === 'computer') {
-      // Human (idx 0) targets Computer (idx 1)
       setCurrentTargetIndex(1); 
     } else if (activeGameData.players.length > 1) {
-      // Current player (idx 0) targets next player (idx 1)
       setCurrentTargetIndex(1 % activeGameData.players.length);
     } else {
-      setCurrentTargetIndex(0); // Should not happen in a valid game
+      setCurrentTargetIndex(0); 
     }
     
     setWinner(null);
@@ -100,13 +107,17 @@ export default function GamePage() {
       );
       const newActiveGameData = { ...prevActiveGameData, players: updatedPlayersArray };
 
-      if (newActiveGameData.gameId) { // Persist for multiplayer games in allGames
+      if (newActiveGameData.gameId) { 
         const allGamesRaw = localStorage.getItem('locked-codes-all-games');
         if (allGamesRaw) {
-          const allGames = JSON.parse(allGamesRaw) as Record<string, ActiveGameData>;
-          if (allGames[newActiveGameData.gameId]) {
-            allGames[newActiveGameData.gameId] = newActiveGameData;
-            localStorage.setItem('locked-codes-all-games', JSON.stringify(allGames));
+          try {
+            const allGames = JSON.parse(allGamesRaw) as Record<string, ActiveGameData>;
+            if (allGames[newActiveGameData.gameId]) {
+              allGames[newActiveGameData.gameId] = newActiveGameData;
+              localStorage.setItem('locked-codes-all-games', JSON.stringify(allGames));
+            }
+          } catch (e) {
+            console.error("Failed to parse or update allGames in localStorage", e);
           }
         }
       }
@@ -128,46 +139,31 @@ export default function GamePage() {
       const nextPlayerIdx = (prevPlayerIndex + 1) % currentNumPlayers;
   
       if (currentGameMode === 'computer') {
-        // In 'computer' mode: Human is 0, Computer is 1.
-        // If current was Human (0), next is Computer (1). Computer (1) targets Human (0).
-        // If current was Computer (1), next is Human (0). Human (0) targets Computer (1).
         setCurrentTargetIndex(nextPlayerIdx === 0 ? 1 : 0);
-      } else { // Multiplayer
-        if (currentNumPlayers === 1) { // Should not happen in multiplayer
+      } else { 
+        if (currentNumPlayers === 1) { 
           setCurrentTargetIndex(0);
         } else {
-          // Player N targets Player N+1 (cyclical)
-          // Target index should not be the same as the next player index
-          let nextTargetIdxVal = (nextPlayerIdx + 1) % currentNumPlayers;
-          if (nextTargetIdxVal === nextPlayerIdx && currentNumPlayers > 1) { 
-            // This case happens if N+1 wraps around to N itself, e.g. in a 2-player game, P0 targets P1. P1 targets P0.
-            // If P0 (idx 0) just played, next player is P1 (idx 1). P1 targets P0 (idx 0).
-            // If P1 (idx 1) just played, next player is P0 (idx 0). P0 targets P1 (idx 1).
-            // So, if nextPlayerIdx is X, target is (X+1)%N. This logic seems okay.
-            // Let's re-evaluate: target is always the *next distinct* player.
-             // The person you are guessing is (currentPlayerIndex + 1 + offset) % numPlayers until it's not currentPlayerIndex
             let targetOffset = 1;
-            nextTargetIdxVal = (nextPlayerIdx + targetOffset) % currentNumPlayers;
+            let nextTargetIdxVal = (nextPlayerIdx + targetOffset) % currentNumPlayers;
             while(nextTargetIdxVal === nextPlayerIdx && currentNumPlayers > 1) {
                 targetOffset++;
                 nextTargetIdxVal = (nextPlayerIdx + targetOffset) % currentNumPlayers;
-                if (targetOffset > currentNumPlayers) break; // safety break
+                if (targetOffset > currentNumPlayers * 2) break; 
             }
              setCurrentTargetIndex(nextTargetIdxVal);
           }
-           setCurrentTargetIndex(nextTargetIdxVal);
         }
-      }
       return nextPlayerIdx;
     });
-  }, []);
+  }, [setCurrentPlayerIndex, setCurrentTargetIndex]);
 
 
   const handlePlayerGuess = useCallback((guessValue: string) => {
     if (winner || playersRef.current.length === 0) return;
 
-    const currentPlayer = playersRef.current[currentPlayerIndex];
-    const targetPlayer = playersRef.current[currentTargetIndex];
+    const currentPlayer = playersRef.current[currentPlayerIndexRef.current];
+    const targetPlayer = playersRef.current[currentTargetIndexRef.current];
 
     if (!currentPlayer || currentPlayer.isComputer || !targetPlayer || !targetPlayer.secretCode) {
       console.error("Invalid state for player guess", { currentPlayer, targetPlayer, winner });
@@ -189,14 +185,23 @@ export default function GamePage() {
       isPlayer: !currentPlayer.isComputer 
     };
     
-    const updatedPlayerGuesses = [...currentPlayer.guesses, newGuess];
-    const updatedPlayerScore = calculatePlayerScore(updatedPlayerGuesses); 
+    setPlayers(prevPlayers => {
+        const updatedPlayers = prevPlayers.map(p => {
+            if (p.id === currentPlayer.id) {
+                const updatedGuesses = [...p.guesses, newGuess];
+                const updatedScore = calculatePlayerScore(updatedGuesses);
+                return { ...p, guesses: updatedGuesses, score: updatedScore };
+            }
+            return p;
+        });
+        // Persist this specific update to localStorage
+        const playerToUpdate = updatedPlayers.find(p => p.id === currentPlayer.id);
+        if(playerToUpdate) {
+            updatePlayerInGameDataFunctional(currentPlayer.id, { guesses: playerToUpdate.guesses, score: playerToUpdate.score });
+        }
+        return updatedPlayers;
+    });
 
-    const newPlayers = playersRef.current.map(p => 
-      p.id === currentPlayer.id ? { ...p, guesses: updatedPlayerGuesses, score: updatedPlayerScore } : p
-    );
-    setPlayers(newPlayers);
-    updatePlayerInGameDataFunctional(currentPlayer.id, { guesses: updatedPlayerGuesses, score: updatedPlayerScore });
 
     if (checkWin(feedback)) {
       setWinner(currentPlayer);
@@ -204,7 +209,7 @@ export default function GamePage() {
     } else {
       advanceTurn();
     }
-  }, [currentPlayerIndex, currentTargetIndex, winner, toast, updatePlayerInGameDataFunctional, advanceTurn]);
+  }, [winner, toast, updatePlayerInGameDataFunctional, advanceTurn, setWinner, setRevealCodes]);
   
 
   const makeComputerGuess = useCallback(() => {
@@ -212,8 +217,6 @@ export default function GamePage() {
       return;
     }
   
-    // In 'computer' mode, computer is player 1, human is player 0.
-    // Computer (currentPlayerIndex should be 1) targets Human (target should be 0).
     const computerPlayer = playersRef.current.find(p => p.isComputer);
     const humanPlayer = playersRef.current.find(p => !p.isComputer);
   
@@ -235,15 +238,20 @@ export default function GamePage() {
       isPlayer: false 
     };
     
-    const updatedComputerGuesses = [...computerPlayer.guesses, newGuess];
-    const updatedComputerScore = calculatePlayerScore(updatedComputerGuesses);
-  
     setPlayers(prevPlayers => {
-      const updatedPlayers = prevPlayers.map(p =>
-        p.id === computerPlayer.id ? { ...p, guesses: updatedComputerGuesses, score: updatedComputerScore } : p
-      );
+      const updatedPlayers = prevPlayers.map(p => {
+        if (p.id === computerPlayer.id) {
+          const updatedGuesses = [...p.guesses, newGuess];
+          const updatedScore = calculatePlayerScore(updatedGuesses);
+          return { ...p, guesses: updatedGuesses, score: updatedScore };
+        }
+        return p;
+      });
       // Persist this specific update to localStorage
-      updatePlayerInGameDataFunctional(computerPlayer.id, { guesses: updatedComputerGuesses, score: updatedComputerScore });
+      const playerToUpdate = updatedPlayers.find(p => p.id === computerPlayer.id);
+      if(playerToUpdate){
+          updatePlayerInGameDataFunctional(computerPlayer.id, { guesses: playerToUpdate.guesses, score: playerToUpdate.score });
+      }
       return updatedPlayers;
     });
   
@@ -258,21 +266,22 @@ export default function GamePage() {
     } else {
       advanceTurn();
     }
-  }, [winner, toast, updatePlayerInGameDataFunctional, advanceTurn]); 
+  }, [winner, toast, updatePlayerInGameDataFunctional, advanceTurn, setWinner, setRevealCodes]); 
   
   
   useEffect(() => {
     if (isLoading || winner) return;
 
-    const currentPlayerEntity = players[currentPlayerIndex];
+    const currentPlayerEntity = playersRef.current[currentPlayerIndexRef.current];
+    const currentMode = gameModeRef.current;
     
-    if (currentPlayerEntity?.isComputer && gameModeRef.current === 'computer') {
+    if (currentPlayerEntity?.isComputer && currentMode === 'computer') {
       const timer = setTimeout(() => {
         makeComputerGuess();
       }, COMPUTER_THINK_DELAY_MS); 
       return () => clearTimeout(timer);
     }
-  }, [isLoading, players, currentPlayerIndex, winner, makeComputerGuess]);
+  }, [isLoading, currentPlayerIndex, winner, makeComputerGuess]);
 
 
   const handlePlayAgain = () => {
@@ -284,12 +293,11 @@ export default function GamePage() {
         const isMultiplayer = activeGameData.gameId && (activeGameData.gameMode === 'duo' || activeGameData.gameMode === 'trio' || activeGameData.gameMode === 'quads');
         
         if (isMultiplayer) {
-            // Reset players for multiplayer lobby
             const resetPlayers = activeGameData.players.map(p => ({
               ...p, 
               guesses:[], 
               score:0, 
-              isReady: p.isHost ? true : false, // Host is auto-ready, others not. Code remains for host.
+              isReady: p.isHost ? true : false, 
               secretCode: p.isComputer ? generateSecretCode() : (p.isHost ? p.secretCode : '') 
             }));
 
@@ -301,27 +309,28 @@ export default function GamePage() {
              
             setActiveGameData(newGameData);
              
-            // Update allGames in localStorage
             const allGamesRaw = localStorage.getItem('locked-codes-all-games');
             if(allGamesRaw && activeGameData.gameId){
-                 const allGames = JSON.parse(allGamesRaw) as Record<string, ActiveGameData>;
-                 allGames[activeGameData.gameId] = newGameData;
-                 localStorage.setItem('locked-codes-all-games', JSON.stringify(allGames));
+                 try {
+                    const allGames = JSON.parse(allGamesRaw) as Record<string, ActiveGameData>;
+                    allGames[activeGameData.gameId] = newGameData;
+                    localStorage.setItem('locked-codes-all-games', JSON.stringify(allGames));
+                 } catch(e) { console.error("Failed to update allGames on play again", e); }
             }
 
-            // Navigate to appropriate lobby
             if(activeGameData.multiplayerRole === 'host'){
                 router.push(`/host-lobby/${activeGameData.gameId}`);
             } else if (activeGameData.multiplayerRole === 'join') { 
                  router.push(`/player-lobby/${activeGameData.gameId}`);
-            } else { // Should not happen, but fallback
+            } else { 
                 router.push('/select-mode');
             }
-        } else { // Single player (vs Computer)
-             router.push('/enter-code'); // Go back to enter code for a new game
+        } else { 
+             setActiveGameData(prev => prev ? ({...prev, gameStatus: 'lobby', players: []}) : null); // Reset for enter-code
+             router.push('/enter-code'); 
         }
     } else { 
-        router.push('/select-mode'); // Fallback if no active game data
+        router.push('/select-mode'); 
     }
   };
 
@@ -329,27 +338,25 @@ export default function GamePage() {
     const gameIdToClean = activeGameData?.gameId;
     const role = activeGameData?.multiplayerRole;
     
-    setActiveGameData(null); // Clear current game from active state
+    setActiveGameData(null); 
 
-    if (gameIdToClean && role) { // If it was a multiplayer game
+    if (gameIdToClean && role) { 
         const allGamesStored = localStorage.getItem('locked-codes-all-games');
         if (allGamesStored) {
-            let allGames = JSON.parse(allGamesStored) as Record<string, ActiveGameData>;
-            if (allGames[gameIdToClean]) {
-                if (role === 'host') {
-                    // Host exits, delete the game from allGames
-                    delete allGames[gameIdToClean];
-                } else if (role === 'join') {
-                    // Joiner exits, remove them from players list
-                    allGames[gameIdToClean].players = allGames[gameIdToClean].players.filter(p => p.id !== username);
-                    // If no human players left (e.g., only host or other joiners), host might eventually delete.
-                    // Or if player list becomes empty.
-                    if (allGames[gameIdToClean].players.filter(p => !p.isComputer).length === 0) {
+            try {
+                let allGames = JSON.parse(allGamesStored) as Record<string, ActiveGameData>;
+                if (allGames[gameIdToClean]) {
+                    if (role === 'host') {
                         delete allGames[gameIdToClean];
+                    } else if (role === 'join') {
+                        allGames[gameIdToClean].players = allGames[gameIdToClean].players.filter(p => p.id !== username);
+                        if (allGames[gameIdToClean].players.filter(p => !p.isComputer).length === 0) {
+                            delete allGames[gameIdToClean];
+                        }
                     }
+                    localStorage.setItem('locked-codes-all-games', JSON.stringify(allGames));
                 }
-                localStorage.setItem('locked-codes-all-games', JSON.stringify(allGames));
-            }
+            } catch (e) { console.error("Failed to update allGames on exit", e); }
         }
     }
     router.push('/');
@@ -402,7 +409,7 @@ export default function GamePage() {
       turnIndicatorText = `Your Turn, ${activePlayerEntity.name}! Guess ${targetPlayerEntity.name}'s code.`;
     } else if (activePlayerEntity.isComputer) {
       turnIndicatorText = `${activePlayerEntity.name} is thinking...`;
-    } else { // Other player's turn (multiplayer)
+    } else { 
       turnIndicatorText = `${activePlayerEntity.name} is guessing ${targetPlayerEntity.name}'s code...`;
     }
   }
@@ -410,10 +417,10 @@ export default function GamePage() {
 
   const getDynamicGridClasses = () => {
     const num = players.length;
-    if (num <= 0) return "md:grid-cols-1"; // Should not happen
-    if (num === 1) return "md:grid-cols-1 lg:grid-cols-1 xl:grid-cols-1";
-    if (num === 2) return "md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2";
-    if (num === 3) return "md:grid-cols-1 lg:grid-cols-3 xl:grid-cols-3"; 
+    if (num <= 0) return "md:grid-cols-1"; 
+    if (num === 1) return "md:grid-cols-1"; // For single player vs computer, could span more later
+    if (num === 2) return "md:grid-cols-2";
+    if (num === 3) return "md:grid-cols-1 lg:grid-cols-3"; 
     if (num >= 4) return "md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4"; 
     return "md:grid-cols-2"; 
   };
@@ -466,5 +473,4 @@ export default function GamePage() {
     </div>
   );
 }
-
     
