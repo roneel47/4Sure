@@ -11,7 +11,7 @@ import PlayerPanel from './components/PlayerPanel';
 import GuessInput from './components/GuessInput';
 import GameEndDialog from './components/GameEndDialog';
 import type { Guess, Player, ActiveGameData } from '@/lib/gameTypes';
-import { CODE_LENGTH, calculateFeedback, checkWin, generateComputerGuess, calculatePlayerScore } from '@/lib/gameLogic';
+import { CODE_LENGTH, calculateFeedback, checkWin, generateComputerGuess, calculatePlayerScore, generateSecretCode } from '@/lib/gameLogic';
 import { LogOut } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
@@ -95,9 +95,12 @@ export default function GamePage() {
     });
   }, [setActiveGameData]);
 
+  const gameModeFromActiveData = activeGameData?.gameMode;
+  const numPlayersFromActiveData = activeGameData?.players?.length;
+
   const advanceTurn = useCallback(() => {
-    const gameModeForTurnLogic = activeGameData?.gameMode;
-    const numPlayersForTurnLogic = activeGameData?.players?.length;
+    const gameModeForTurnLogic = gameModeFromActiveData;
+    const numPlayersForTurnLogic = numPlayersFromActiveData;
 
     if (!gameModeForTurnLogic || !numPlayersForTurnLogic || numPlayersForTurnLogic <= 1) return;
 
@@ -105,8 +108,11 @@ export default function GamePage() {
       const nextPlayerIdx = (prevPlayerIndex + 1) % numPlayersForTurnLogic;
       
       if (gameModeForTurnLogic === 'computer') {
-        setCurrentTargetIndex(prevPlayerIndex);
+        // Human (0) will target Computer (1). Computer (1) will target Human (0).
+        // This sets the target for the player whose turn it *will be* (nextPlayerIdx).
+        setCurrentTargetIndex(nextPlayerIdx === 0 ? 1 : 0); 
       } else {
+        // Multiplayer logic for target index
         let nextTargetIdxVal = (nextPlayerIdx + 1) % numPlayersForTurnLogic;
         if (nextTargetIdxVal === nextPlayerIdx && numPlayersForTurnLogic > 1) { 
           nextTargetIdxVal = (nextTargetIdxVal + 1) % numPlayersForTurnLogic;
@@ -115,7 +121,7 @@ export default function GamePage() {
       }
       return nextPlayerIdx;
     });
-  }, [activeGameData]);
+  }, [gameModeFromActiveData, numPlayersFromActiveData, setCurrentPlayerIndex, setCurrentTargetIndex]);
 
 
   const handlePlayerGuess = (guessValue: string) => {
@@ -156,26 +162,24 @@ export default function GamePage() {
   };
 
   const playersRef = useRef(players);
-  const currentTargetIndexRef = useRef(currentTargetIndex);
   const winnerRef = useRef(winner);
 
   useEffect(() => {
     playersRef.current = players;
   }, [players]);
-  useEffect(() => {
-    currentTargetIndexRef.current = currentTargetIndex;
-  }, [currentTargetIndex]);
+
   useEffect(() => {
     winnerRef.current = winner;
   }, [winner]);
 
   const makeComputerGuess = useCallback(() => {
     const currentPlayers = playersRef.current;
-    const currentTargetIdx = currentTargetIndexRef.current;
     const gameWinner = winnerRef.current;
 
-    const computerPlayer = currentPlayers[currentPlayerIndex]; 
-    const targetHumanPlayer = currentPlayers[currentTargetIdx];
+    // In 'computer' mode, currentPlayerIndex will be the computer's index (e.g., 1)
+    // The computer (at currentPlayerIndex) targets the other player (human at index 0)
+    const computerPlayer = currentPlayers[currentPlayerIndex];
+    const targetHumanPlayer = currentPlayers[currentPlayerIndex === 0 ? 1 : 0]; // Human is the other player
 
     if (gameWinner || !computerPlayer || !computerPlayer.isComputer || !targetHumanPlayer || !targetHumanPlayer.secretCode) {
       return;
@@ -220,7 +224,7 @@ export default function GamePage() {
     } else {
       advanceTurn();
     }
-  }, [ currentPlayerIndex, toast, updatePlayerInGameDataFunctional, advanceTurn ]); // Removed setWinner, setRevealCodes as they are setters
+  }, [ currentPlayerIndex, winner, toast, updatePlayerInGameDataFunctional, advanceTurn ]); 
   
   useEffect(() => {
     const currentPlayer = players[currentPlayerIndex];
@@ -273,8 +277,9 @@ export default function GamePage() {
             } else { 
                 router.push('/select-mode');
             }
-        } else { 
-            router.push('/select-mode'); 
+        } else { // Vs Computer mode
+            // For 'vs Computer', we can navigate to enter-code or directly re-initialize here
+             router.push('/enter-code'); // Simplest is to go back to code entry
         }
     } else { 
         router.push('/select-mode'); 
@@ -339,20 +344,17 @@ export default function GamePage() {
 
   const getDynamicGridClasses = () => {
     const num = players.length;
-    let lgColsClass = 'lg:grid-cols-2'; // Default for 2, 3, 4 players
+    let lgColsClass = 'lg:grid-cols-2'; 
     let xlColsClass = '';
 
     if (num === 1) {
       lgColsClass = 'lg:grid-cols-1';
       xlColsClass = 'xl:grid-cols-1';
     } else if (num === 2) {
-      // lgColsClass is already 'lg:grid-cols-2'
       xlColsClass = 'xl:grid-cols-2';
     } else if (num === 3) {
-      // lgColsClass is already 'lg:grid-cols-2' (or could be 3 if design prefers)
       xlColsClass = 'xl:grid-cols-3';
     } else if (num >= 4) {
-      // lgColsClass is already 'lg:grid-cols-2' (or could be 4)
       xlColsClass = 'xl:grid-cols-4';
     }
     return `${lgColsClass} ${xlColsClass}`;
@@ -379,20 +381,13 @@ export default function GamePage() {
       <main className={`w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 ${getDynamicGridClasses()} gap-4 sm:gap-6 mb-6 auto-rows-fr`}>
         {players.map((player) => {
             const guessesByThisPlayer = player.guesses.filter(g => {
-                // In 'computer' mode, human player (index 0) targets computer (index 1), and vice-versa.
-                // PlayerPanel for human should show their guesses against computer.
-                // PlayerPanel for computer should show its guesses against human.
                 if(activeGameData.gameMode === 'computer'){
-                    if (player.id === username) { // Human player
+                    if (player.id === username) { 
                         return g.targetId === players.find(p=>p.isComputer)?.id;
-                    } else if (player.isComputer) { // Computer player
+                    } else if (player.isComputer) { 
                         return g.targetId === players.find(p=>p.id === username)?.id;
                     }
                 }
-                // For multiplayer: For a given player's panel, show guesses BY that player
-                // This will display who they are guessing against based on currentTargetIndex logic when the guess was made.
-                // Or, if we want each panel to show guesses *against* its owner, this needs more complex filtering.
-                // For now, showing guesses *BY* this player is simpler for the panel.
                 return g.guesserId === player.id; 
             });
             return (
@@ -423,4 +418,4 @@ export default function GamePage() {
   );
 }
 
-    
+      
