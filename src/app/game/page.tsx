@@ -15,6 +15,7 @@ import type { Guess, Player, ActiveGameData } from '@/lib/gameTypes';
 import { CODE_LENGTH, calculateFeedback, checkWin, generateComputerGuess, calculatePlayerScore } from '@/lib/gameLogic';
 import { LogOut } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardHeader, CardContent } from '@/components/ui/card'; // Added import
 
 const REVEAL_DELAY_MS = 3000;
 
