@@ -4,18 +4,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import GameLogo from '@/components/game-logo';
 import useLocalStorage from '@/hooks/use-local-storage';
-import { RefreshCw, Lock, Unlock } from 'lucide-react';
-import { Slider } from '@/components/ui/slider';
+import { RefreshCw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 export default function UsernamePage() {
   const [username, setUsername] = useLocalStorage<string>('locked-codes-username', '');
   const [inputValue, setInputValue] = useState('');
-  const [sliderValue, setSliderValue] = useState([0]);
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
 
@@ -40,17 +39,9 @@ export default function UsernamePage() {
     }
   }, [inputValue, setUsername, router]);
 
-  const handleSliderChange = (value: number[]) => {
-    setSliderValue(value);
-  };
-
-  const handleSliderCommit = (value: number[]) => {
-    if (value[0] === 100 && inputValue.trim()) {
-      handleProceed();
-    } else if (inputValue.trim()) {
-      // Snap back if not fully slid or no username
-      setSliderValue([0]);
-    }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleProceed();
   };
 
   if (isLoading) {
@@ -70,14 +61,7 @@ export default function UsernamePage() {
                 <Skeleton className="h-10 w-10" /> {/* Button placeholder */}
               </div>
             </div>
-            <div className="space-y-3">
-              <Skeleton className="h-4 w-1/3 mx-auto" /> {/* Slider label placeholder */}
-              <div className="flex items-center space-x-3">
-                <Skeleton className="h-6 w-6 rounded-full" /> {/* Lock icon placeholder */}
-                <Skeleton className="h-6 flex-grow" /> {/* Slider placeholder */}
-                <Skeleton className="h-6 w-6 rounded-full" /> {/* Unlock icon placeholder */}
-              </div>
-            </div>
+            <Skeleton className="h-10 w-full" /> {/* Button placeholder */}
           </CardContent>
         </Card>
       </div>
@@ -85,9 +69,6 @@ export default function UsernamePage() {
   }
 
   const isInputEmpty = inputValue.trim() === '';
-  const sliderThumbColor = isInputEmpty ? 'bg-muted-foreground' : sliderValue[0] === 100 ? 'bg-green-500' : 'bg-primary';
-  const unlockIconColor = isInputEmpty ? 'text-muted-foreground' : sliderValue[0] === 100 ? 'text-green-500' : 'text-primary';
-
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
@@ -100,7 +81,7 @@ export default function UsernamePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={(e) => { e.preventDefault(); if (!isInputEmpty) handleProceed(); }} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <label htmlFor="username" className="text-sm font-medium">
                 Username
@@ -126,30 +107,16 @@ export default function UsernamePage() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <label htmlFor="unlock-slider" className="text-sm font-medium text-center block">
-                Next: Select Mode
-              </label>
-              <div className="flex items-center space-x-3">
-                <Lock className={`w-6 h-6 ${isInputEmpty ? 'text-muted-foreground' : 'text-primary'}`} />
-                <Slider
-                  id="unlock-slider"
-                  value={sliderValue}
-                  onValueChange={handleSliderChange}
-                  onValueCommit={handleSliderCommit}
-                  max={100}
-                  step={1}
-                  disabled={isInputEmpty}
-                  className={cn(isInputEmpty ? 'opacity-50 cursor-not-allowed' : '')}
-                  aria-labelledby="unlock-slider-label"
-                />
-                <Unlock className={`w-6 h-6 ${unlockIconColor}`} />
-              </div>
-            </div>
+            <Button 
+              type="submit" 
+              className="w-full text-lg py-3 bg-primary hover:bg-primary/90 text-primary-foreground"
+              disabled={isInputEmpty}
+            >
+              Next: Select Mode
+            </Button>
           </form>
         </CardContent>
       </Card>
     </div>
   );
 }
-
