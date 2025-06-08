@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import GameLogo from '@/components/game-logo';
 import useLocalStorage from '@/hooks/use-local-storage';
 import type { GameMode } from '@/lib/gameTypes';
-import { Users, Bot, User, Users2, Users3 } from 'lucide-react';
+import { Users, Bot, User, Users2 } from 'lucide-react';
 
 export default function SelectModePage() {
   const router = useRouter();
@@ -72,7 +72,7 @@ export default function SelectModePage() {
             variant="secondary"
             size="lg"
           >
-            <Users3 className="mr-2 h-5 w-5" /> Quads (4 Players)
+            <Users className="mr-2 h-5 w-5" /> Quads (4 Players)
           </Button>
         </CardContent>
       </Card>
