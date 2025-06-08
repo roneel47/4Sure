@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -8,38 +9,52 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import GameLogo from '@/components/game-logo';
 import useLocalStorage from '@/hooks/use-local-storage';
 import { useToast } from "@/hooks/use-toast";
+import type { GameMode } from '@/lib/gameTypes';
 
 const CODE_LENGTH = 4;
 
+interface PlayerSetupInfo {
+  name: string;
+  secretCode: string;
+}
+
 export default function EnterCodePage() {
-  const [secretCode, setSecretCode] = useLocalStorage<string>('locked-codes-secret-code', '');
-  const [inputValue, setInputValue] = useState('');
+  const [secretCodeInput, setSecretCodeInput] = useState('');
   const [username] = useLocalStorage<string>('locked-codes-username', '');
+  const [gameMode] = useLocalStorage<GameMode | null>('locked-codes-gamemode', null);
+  // For multiplayer, this will eventually hold all player codes. For now, just Player 1.
+  const [, setPlayersSetup] = useLocalStorage<PlayerSetupInfo[]>('locked-codes-players-setup', []); 
   const router = useRouter();
   const { toast } = useToast();
 
   useEffect(() => {
     if (!username) {
-      // Redirect to username page if not set
       router.push('/');
     }
-    if (secretCode) {
-        setInputValue(secretCode);
+    if (!gameMode) {
+      router.push('/select-mode');
     }
-  }, [username, secretCode, router]);
+  }, [username, gameMode, router]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    // Allow only digits and limit length
     if (/^\d*$/.test(val) && val.length <= CODE_LENGTH) {
-      setInputValue(val);
+      setSecretCodeInput(val);
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputValue.length === CODE_LENGTH && /^\d{4}$/.test(inputValue)) {
-      setSecretCode(inputValue);
+    if (secretCodeInput.length === CODE_LENGTH && /^\d{4}$/.test(secretCodeInput)) {
+      // For now, we only set up the first player (the current user)
+      // Multiplayer setup will need to be expanded here or on the game page
+      if (username) {
+        setPlayersSetup([{ name: username, secretCode: secretCodeInput }]);
+      }
+      // Keep the old single user secret code for compatibility if needed, or remove if fully migrating
+      localStorage.setItem('locked-codes-secret-code', JSON.stringify(secretCodeInput)); 
+
+
       router.push('/game');
     } else {
       toast({
@@ -50,8 +65,16 @@ export default function EnterCodePage() {
     }
   };
 
-  if (!username) {
-    return <div className="min-h-screen flex items-center justify-center"><p>Loading...</p></div>; // Or a loading spinner
+  const getPageDescription = () => {
+    if (gameMode === "computer") {
+      return `Hi ${username}! Enter a ${CODE_LENGTH}-digit secret code. The computer will try to guess it.`;
+    }
+    // For multiplayer, this is Player 1. Further player entries would be handled next.
+    return `Player 1 (${username}), set your ${CODE_LENGTH}-digit secret code.`;
+  };
+
+  if (!username || !gameMode) {
+    return <div className="min-h-screen flex items-center justify-center"><p>Loading...</p></div>;
   }
 
   return (
@@ -61,7 +84,7 @@ export default function EnterCodePage() {
         <CardHeader>
           <CardTitle className="text-3xl font-bold text-center text-primary">Set Your Secret Code</CardTitle>
           <CardDescription className="text-center">
-            Hi {username}! Enter a {CODE_LENGTH}-digit secret code. The computer will try to guess it.
+            {getPageDescription()}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -72,8 +95,8 @@ export default function EnterCodePage() {
               </label>
               <Input
                 id="secretCode"
-                type="text" // Use text to easily manage input and show digits, use password for hiding if needed
-                value={inputValue}
+                type="text"
+                value={secretCodeInput}
                 onChange={handleInputChange}
                 placeholder="E.g., 1234"
                 maxLength={CODE_LENGTH}
@@ -89,8 +112,8 @@ export default function EnterCodePage() {
           </form>
         </CardContent>
       </Card>
-       <Button variant="link" onClick={() => router.push('/')} className="mt-4 text-sm text-muted-foreground">
-        Change Username
+       <Button variant="link" onClick={() => router.push('/select-mode')} className="mt-4 text-sm text-muted-foreground">
+        Change Game Mode
       </Button>
     </div>
   );

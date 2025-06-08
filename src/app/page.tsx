@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -20,7 +21,6 @@ export default function UsernamePage() {
   };
   
   useEffect(() => {
-    // Pre-fill input if username already exists in localStorage
     if (username) {
       setInputValue(username);
     } else {
@@ -33,7 +33,7 @@ export default function UsernamePage() {
     e.preventDefault();
     if (inputValue.trim()) {
       setUsername(inputValue.trim());
-      router.push('/enter-code');
+      router.push('/select-mode'); // Navigate to select-mode page
     }
   };
 
@@ -69,7 +69,7 @@ export default function UsernamePage() {
               </div>
             </div>
             <Button type="submit" className="w-full text-lg py-3 bg-primary hover:bg-primary/90 text-primary-foreground">
-              Next: Set Secret Code
+              Next: Select Mode
             </Button>
           </form>
         </CardContent>
