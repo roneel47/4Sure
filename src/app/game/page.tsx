@@ -11,12 +11,13 @@ import PlayerPanel from './components/PlayerPanel';
 import GuessInput from './components/GuessInput';
 import TurnIndicator from './components/TurnIndicator';
 import GameEndDialog from './components/GameEndDialog';
-import type { Guess, DigitFeedback } from '@/lib/gameTypes';
+import type { Guess } from '@/lib/gameTypes';
 import { CODE_LENGTH, generateSecretCode, calculateFeedback, checkWin, generateComputerGuess } from '@/lib/gameLogic';
 import { LogOut } from 'lucide-react';
 
 const COMPUTER_PLAYER_NAME = "Computer";
 const MAX_DISPLAY_GUESSES = 5;
+const REVEAL_DELAY_MS = 3000; // 3 seconds delay before showing dialog
 
 export default function GamePage() {
   const router = useRouter();
@@ -32,6 +33,7 @@ export default function GamePage() {
   const [winner, setWinner] = useState<string | null>(null);
   const [isGameEndDialogOpen, setIsGameEndDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [revealCodes, setRevealCodes] = useState<boolean>(false);
 
   const initializeGame = useCallback(() => {
     if (!username || !userSecretCode) {
@@ -45,14 +47,26 @@ export default function GamePage() {
     setCurrentTurn('user');
     setWinner(null);
     setIsGameEndDialogOpen(false);
+    setRevealCodes(false);
     setIsLoading(false);
   }, [username, userSecretCode, router, toast]);
 
   useEffect(() => {
     initializeGame();
-  }, [initializeGame]); 
+  }, [initializeGame]);
+
+  useEffect(() => {
+    if (winner && revealCodes) {
+      const timer = setTimeout(() => {
+        setIsGameEndDialogOpen(true);
+      }, REVEAL_DELAY_MS);
+      return () => clearTimeout(timer);
+    }
+  }, [winner, revealCodes]);
 
   const handleUserGuess = (guessValue: string) => {
+    if (winner) return; // Don't process guesses if game already won
+
     if (guessValue.length !== CODE_LENGTH || !/^\d+$/.test(guessValue)) {
       toast({ title: "Invalid Guess", description: `Guess must be ${CODE_LENGTH} digits.`, variant: "destructive" });
       return;
@@ -71,7 +85,8 @@ export default function GamePage() {
 
     if (checkWin(feedback)) {
       setWinner(username);
-      setIsGameEndDialogOpen(true);
+      setRevealCodes(true);
+      // setIsGameEndDialogOpen(true); // Dialog now handled by useEffect
     } else {
       setCurrentTurn('computer');
     }
@@ -100,11 +115,12 @@ export default function GamePage() {
 
     if (checkWin(feedback)) {
       setWinner(COMPUTER_PLAYER_NAME);
-      setIsGameEndDialogOpen(true);
+      setRevealCodes(true);
+      // setIsGameEndDialogOpen(true); // Dialog now handled by useEffect
     } else {
       setCurrentTurn('user');
     }
-  }, [computerGuesses, userSecretCode, toast, winner, username]); // Added username to dependency array for setWinner
+  }, [computerGuesses, userSecretCode, toast, winner, username]);
 
   useEffect(() => {
     if (currentTurn === 'computer' && !winner) {
@@ -122,10 +138,10 @@ export default function GamePage() {
   const handleExitGame = () => {
     localStorage.removeItem('locked-codes-username');
     localStorage.removeItem('locked-codes-secret-code');
-    // Also clear game state if needed, though initializeGame on next mount handles it
     setUserGuesses([]);
     setComputerGuesses([]);
     setWinner(null);
+    setRevealCodes(false);
     router.push('/');
   };
 
@@ -145,26 +161,26 @@ export default function GamePage() {
 
       <TurnIndicator 
         currentPlayerName={currentTurn === 'user' ? username : COMPUTER_PLAYER_NAME}
-        isPlayerTurn={currentTurn === 'user'}
+        isPlayerTurn={currentTurn === 'user' && !winner} // Disable turn indicator text if game won
       />
 
       <main className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6">
         <PlayerPanel
           playerName={username}
           guesses={userGuesses}
-          isCurrentTurn={currentTurn === 'user'}
-          secretCodeToDisplay="Your Code (Hidden)" 
+          isCurrentTurn={currentTurn === 'user' && !winner}
+          secretCodeToDisplay={revealCodes ? userSecretCode : "Your Code (Hidden)"} 
         />
         <PlayerPanel
           playerName={COMPUTER_PLAYER_NAME}
           guesses={computerGuesses}
-          isCurrentTurn={currentTurn === 'computer'}
-          secretCodeToDisplay="****" 
+          isCurrentTurn={currentTurn === 'computer' && !winner}
+          secretCodeToDisplay={revealCodes ? computerSecretCode : "****"} 
         />
       </main>
 
       {currentTurn === 'user' && !winner && (
-        <GuessInput onSubmitGuess={handleUserGuess} disabled={currentTurn !== 'user' || !!winner} />
+        <GuessInput onSubmitGuess={handleUserGuess} disabled={currentTurn !== 'user' || !!winner || revealCodes} />
       )}
       
       <GameEndDialog
