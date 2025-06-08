@@ -10,9 +10,10 @@ export interface Guess {
 }
 
 export type GameMode = "computer" | "duo" | "trio" | "quads";
+export type MultiplayerRole = 'host' | 'join';
 
 export interface Player {
-  id: string;
+  id:string;
   name: string;
   secretCode: string;
   guesses: Guess[];
