@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -15,6 +16,7 @@ import { CODE_LENGTH, generateSecretCode, calculateFeedback, checkWin, generateC
 import { LogOut } from 'lucide-react';
 
 const COMPUTER_PLAYER_NAME = "Computer";
+const MAX_DISPLAY_GUESSES = 5;
 
 export default function GamePage() {
   const router = useRouter();
@@ -48,7 +50,7 @@ export default function GamePage() {
 
   useEffect(() => {
     initializeGame();
-  }, [initializeGame]); // Only on mount or if initializeGame deps change
+  }, [initializeGame]); 
 
   const handleUserGuess = (guessValue: string) => {
     if (guessValue.length !== CODE_LENGTH || !/^\d+$/.test(guessValue)) {
@@ -58,7 +60,14 @@ export default function GamePage() {
 
     const feedback = calculateFeedback(guessValue, computerSecretCode);
     const newGuess: Guess = { id: `user-${Date.now()}`, value: guessValue, feedback, isPlayer: true };
-    setUserGuesses(prev => [...prev, newGuess]);
+    
+    setUserGuesses(prev => {
+      const updatedGuesses = [...prev, newGuess];
+      if (updatedGuesses.length > MAX_DISPLAY_GUESSES) {
+        return updatedGuesses.slice(-MAX_DISPLAY_GUESSES);
+      }
+      return updatedGuesses;
+    });
 
     if (checkWin(feedback)) {
       setWinner(username);
@@ -69,14 +78,20 @@ export default function GamePage() {
   };
 
   const makeComputerGuess = useCallback(() => {
-    if (winner) return; // Don't make a guess if game already won
+    if (winner) return; 
     
     const previousComputerGuessValues = computerGuesses.map(g => g.value);
     const computerGuessValue = generateComputerGuess(previousComputerGuessValues);
     const feedback = calculateFeedback(computerGuessValue, userSecretCode);
     const newGuess: Guess = { id: `comp-${Date.now()}`, value: computerGuessValue, feedback, isPlayer: false };
     
-    setComputerGuesses(prev => [...prev, newGuess]);
+    setComputerGuesses(prev => {
+      const updatedGuesses = [...prev, newGuess];
+      if (updatedGuesses.length > MAX_DISPLAY_GUESSES) {
+        return updatedGuesses.slice(-MAX_DISPLAY_GUESSES);
+      }
+      return updatedGuesses;
+    });
 
     toast({
       title: "Computer Guessed!",
@@ -89,13 +104,13 @@ export default function GamePage() {
     } else {
       setCurrentTurn('user');
     }
-  }, [computerGuesses, userSecretCode, toast, winner]);
+  }, [computerGuesses, userSecretCode, toast, winner, username]); // Added username to dependency array for setWinner
 
   useEffect(() => {
     if (currentTurn === 'computer' && !winner) {
       const timer = setTimeout(() => {
         makeComputerGuess();
-      }, 1500); // Delay for computer's turn
+      }, 1500); 
       return () => clearTimeout(timer);
     }
   }, [currentTurn, winner, makeComputerGuess]);
@@ -105,10 +120,12 @@ export default function GamePage() {
   };
 
   const handleExitGame = () => {
-    // Clear specific game session data, keep username/code for next time?
-    // For this prompt, full clear and redirect.
     localStorage.removeItem('locked-codes-username');
     localStorage.removeItem('locked-codes-secret-code');
+    // Also clear game state if needed, though initializeGame on next mount handles it
+    setUserGuesses([]);
+    setComputerGuesses([]);
+    setWinner(null);
     router.push('/');
   };
 
@@ -136,13 +153,13 @@ export default function GamePage() {
           playerName={username}
           guesses={userGuesses}
           isCurrentTurn={currentTurn === 'user'}
-          secretCodeToDisplay="Your Code (Hidden)" // Or display userSecretCode if desired
+          secretCodeToDisplay="Your Code (Hidden)" 
         />
         <PlayerPanel
           playerName={COMPUTER_PLAYER_NAME}
           guesses={computerGuesses}
           isCurrentTurn={currentTurn === 'computer'}
-          secretCodeToDisplay="****" // Computer's code is hidden
+          secretCodeToDisplay="****" 
         />
       </main>
 
@@ -155,7 +172,7 @@ export default function GamePage() {
         winnerName={winner}
         onPlayAgain={handlePlayAgain}
         onExitGame={handleExitGame}
-        onClose={() => setIsGameEndDialogOpen(false)} // Allow closing dialog without action
+        onClose={() => setIsGameEndDialogOpen(false)} 
       />
     </div>
   );
