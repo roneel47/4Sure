@@ -27,10 +27,13 @@ export default function EnterCodePage() {
       router.push('/');
       return;
     }
+    // This page is now primarily for 'computer' mode setup after selecting "Single Player"
     if (!activeGameData || activeGameData.gameMode !== 'computer') {
-      toast({title:"Info", description: "Setting up multiplayer game..."});
+      // If here without proper activeGameData setup for computer mode, redirect.
+      // This might happen if user navigates directly or activeGameData is cleared.
+      toast({title:"Info", description: "Please select a game mode first.", variant: "default"});
       router.push('/select-mode'); 
-      return; // Return after navigation to prevent further execution
+      return; 
     }
     setIsLoading(false);
   }, [username, activeGameData, router, toast]);
@@ -44,7 +47,16 @@ export default function EnterCodePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (secretCodeInput.length === CODE_LENGTH && /^\d{4}$/.test(secretCodeInput) && username && activeGameData) {
+    if (secretCodeInput.length === CODE_LENGTH && /^\d{4}$/.test(secretCodeInput) && username && activeGameData && activeGameData.gameMode === 'computer') {
+      // Set localStorage items for the user-provided game-computer/page.tsx
+      localStorage.setItem('locked-codes-secret-code', JSON.stringify(secretCodeInput));
+      localStorage.setItem('locked-codes-gamemode', JSON.stringify('computer'));
+      // Set a simple playersSetup for the user's code to potentially pick up
+      const playerSetup = [{ name: username, secretCode: secretCodeInput }];
+      localStorage.setItem('locked-codes-players-setup', JSON.stringify(playerSetup));
+
+
+      // Continue setting activeGameData as it might be useful for other things or future refactoring
       const humanPlayer: Player = {
         id: username,
         name: username,
@@ -69,7 +81,7 @@ export default function EnterCodePage() {
         players: [humanPlayer, computerPlayer],
         gameStatus: 'playing',
       });
-      router.push('/game');
+      router.push('/game-computer'); // Navigate to the dedicated computer game page
     } else {
       toast({
         title: "Invalid Code",
