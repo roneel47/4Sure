@@ -10,6 +10,7 @@ import useLocalStorage from '@/hooks/use-local-storage';
 import { RefreshCw, Lock, Unlock } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 export default function UsernamePage() {
   const [username, setUsername] = useLocalStorage<string>('locked-codes-username', '');
@@ -151,3 +152,4 @@ export default function UsernamePage() {
     </div>
   );
 }
+
