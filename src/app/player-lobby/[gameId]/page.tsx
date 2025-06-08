@@ -12,6 +12,7 @@ import type { ActiveGameData, Player } from '@/lib/gameTypes';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, CheckCircle, Circle, Edit3, Users } from 'lucide-react';
 import { CODE_LENGTH } from '@/lib/gameLogic';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function PlayerLobbyPage() {
   const params = useParams();
@@ -25,6 +26,7 @@ export default function PlayerLobbyPage() {
 
   const [playerSecretCode, setPlayerSecretCode] = useState('');
   const [isCodeSetAndReady, setIsCodeSetAndReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const currentGameData = gameId ? allGames[gameId] : null;
   const currentPlayerInLobby = currentGameData?.players.find(p => p.id === username);
@@ -36,9 +38,12 @@ export default function PlayerLobbyPage() {
       );
       const updatedGame = { ...allGames[gameId], players: updatedPlayers };
       setAllGames(prev => ({ ...prev, [gameId]: updatedGame }));
-      setActiveGameData(prev => prev ? {...prev, players: updatedPlayers} : null);
+      // Update activeGameData if it's the current game
+      if(activeGameData && activeGameData.gameId === gameId) {
+         setActiveGameData(prev => prev ? {...prev, players: updatedPlayers} : null);
+      }
     }
-  }, [gameId, username, allGames, setAllGames, setActiveGameData]);
+  }, [gameId, username, allGames, setAllGames, activeGameData, setActiveGameData]);
 
 
   useEffect(() => {
@@ -46,36 +51,61 @@ export default function PlayerLobbyPage() {
       router.push('/');
       return;
     }
-    if (!currentGameData || !currentPlayerInLobby) {
-        toast({ title: "Error", description: "Game session or your player data not found.", variant: "destructive" });
+    const gameSession = allGames[gameId];
+    if (!gameSession) {
+        toast({ title: "Error", description: "Game session not found.", variant: "destructive" });
         router.push('/select-mode');
         return;
     }
-    if (currentPlayerInLobby.secretCode) {
-        setPlayerSecretCode(currentPlayerInLobby.secretCode);
+    const playerInSession = gameSession.players.find(p => p.id === username);
+    if (!playerInSession) {
+        toast({ title: "Error", description: "You are not part of this game session.", variant: "destructive" });
+        setActiveGameData(null); // Clear potentially stale active game
+        router.push('/join-game'); // Redirect to join game or select mode
+        return;
     }
-    if (currentPlayerInLobby.isReady) {
+    
+    // Sync activeGameData if not already synced or for a different game
+    if (!activeGameData || activeGameData.gameId !== gameId || activeGameData.multiplayerRole !== 'join') {
+        setActiveGameData(gameSession);
+    }
+
+
+    if (playerInSession.secretCode) {
+        setPlayerSecretCode(playerInSession.secretCode);
+    }
+    if (playerInSession.isReady) {
         setIsCodeSetAndReady(true);
     }
-  }, [username, gameId, router, currentGameData, currentPlayerInLobby, toast]);
+    setIsLoading(false);
+  }, [username, gameId, router, allGames, toast, activeGameData, setActiveGameData]);
 
-  // Simulate real-time updates
   useEffect(() => {
-    if (!gameId) return;
+    if (!gameId || isLoading) return;
     const interval = setInterval(() => {
       const latestGames = JSON.parse(localStorage.getItem('locked-codes-all-games') || '{}') as Record<string, ActiveGameData>;
-      if (latestGames[gameId] && JSON.stringify(latestGames[gameId]) !== JSON.stringify(allGames[gameId])) {
-        setAllGames(prev => ({...prev, [gameId]: latestGames[gameId]}));
-         if (activeGameData && activeGameData.gameId === gameId) {
+      if (latestGames[gameId]) {
+        if (JSON.stringify(latestGames[gameId]) !== JSON.stringify(allGames[gameId])) {
+            setAllGames(prev => ({...prev, [gameId]: latestGames[gameId]}));
+        }
+        if(activeGameData && activeGameData.gameId === gameId && JSON.stringify(latestGames[gameId]) !== JSON.stringify(activeGameData)) {
             setActiveGameData(latestGames[gameId]);
         }
+        if (latestGames[gameId]?.gameStatus === 'playing') {
+          // Ensure activeGameData is updated before navigating
+          if(JSON.stringify(latestGames[gameId]) !== JSON.stringify(activeGameData)) {
+            setActiveGameData(latestGames[gameId]);
+          }
+          router.push('/game');
+        }
+      } else if(currentGameData) { // Game disappeared
+        toast({ title: "Lobby Closed", description: "The host may have closed the lobby.", variant: "destructive" });
+        setActiveGameData(null);
+        router.push('/select-mode');
       }
-      if (latestGames[gameId]?.gameStatus === 'playing') {
-        router.push('/game');
-      }
-    }, 2000); // Poll every 2 seconds
+    }, 2000);
     return () => clearInterval(interval);
-  }, [gameId, allGames, setAllGames, router, activeGameData, setActiveGameData]);
+  }, [gameId, allGames, setAllGames, router, activeGameData, setActiveGameData, isLoading, currentGameData, toast]);
 
 
   const handleCodeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,13 +126,59 @@ export default function PlayerLobbyPage() {
   };
   
   const handleEditCode = () => {
-      updatePlayerData({ isReady: false });
+      updatePlayerData({ isReady: false }); // Code remains, just not ready
       setIsCodeSetAndReady(false);
   };
 
+  const handleLeaveLobby = () => {
+    if (gameId && username && allGames[gameId]) {
+      const updatedPlayers = allGames[gameId].players.filter(p => p.id !== username);
+      const updatedGame = { ...allGames[gameId], players: updatedPlayers };
+      
+      if (updatedPlayers.length === 0) { // If last player leaves, delete game
+        const newAllGames = {...allGames};
+        delete newAllGames[gameId];
+        setAllGames(newAllGames);
+      } else {
+        setAllGames(prev => ({ ...prev, [gameId]: updatedGame }));
+      }
+    }
+    setActiveGameData(null);
+    router.push('/select-mode');
+  };
 
-  if (!currentGameData || !username || !currentPlayerInLobby) {
-    return <div className="min-h-screen flex items-center justify-center"><p>Loading lobby...</p></div>;
+
+  if (isLoading || !currentGameData || !username || !currentPlayerInLobby) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
+        <Skeleton className="h-[100px] w-[180px] mb-8 sm:mb-12" />
+        <Card className="w-full max-w-lg shadow-2xl">
+          <CardHeader>
+            <Skeleton className="h-8 w-1/2 mx-auto" /> {/* Title */}
+            <div className="text-center space-y-1 my-2">
+              <Skeleton className="h-4 w-3/4 mx-auto" /> {/* Game Code Desc */}
+              <Skeleton className="h-4 w-1/2 mx-auto" /> {/* Game Mode Desc */}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Skeleton className="h-6 w-1/3 mx-auto mb-2" /> {/* Your Setup Title */}
+              <Skeleton className="h-10 w-full mb-2" /> {/* Input */}
+              <Skeleton className="h-10 w-full" /> {/* Button */}
+            </div>
+            <div>
+              <Skeleton className="h-6 w-1/2 mx-auto mb-2" /> {/* Players Title */}
+              <div className="space-y-2 max-h-48 p-1">
+                {[...Array(2)].map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" /> /* Player item */
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Skeleton className="h-6 w-1/3 mt-4" /> {/* Back button */}
+      </div>
+    );
   }
 
   return (
@@ -118,7 +194,7 @@ export default function PlayerLobbyPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold mb-2 text-center">Your Setup ({username})</h3>
+            <h3 className="text-lg font-semibold mb-2 text-center">Your Setup ({currentPlayerInLobby.name})</h3>
             {!isCodeSetAndReady ? (
               <div className="space-y-2">
                 <Input
@@ -162,19 +238,7 @@ export default function PlayerLobbyPage() {
           </div>
         </CardContent>
       </Card>
-      <Button variant="link" onClick={() => {
-          // Logic for leaving a game: remove player from players list
-          if (gameId && username && allGames[gameId]) {
-            const updatedPlayers = allGames[gameId].players.filter(p => p.id !== username);
-            const updatedGame = { ...allGames[gameId], players: updatedPlayers };
-            setAllGames(prev => ({ ...prev, [gameId]: updatedGame }));
-            // If player leaving was the host, different logic might be needed (e.g. assign new host or end game)
-            // For now, just remove player.
-          }
-          setActiveGameData(null);
-          router.push('/select-mode');
-        }} 
-        className="mt-4 text-sm text-muted-foreground">
+      <Button variant="link" onClick={handleLeaveLobby} className="mt-4 text-sm text-muted-foreground">
         <ArrowLeft className="mr-2 h-4 w-4" /> Leave Lobby
       </Button>
       <p className="text-xs text-muted-foreground mt-4 text-center">
@@ -183,4 +247,3 @@ export default function PlayerLobbyPage() {
     </div>
   );
 }
-

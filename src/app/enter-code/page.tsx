@@ -9,13 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import GameLogo from '@/components/game-logo';
 import useLocalStorage from '@/hooks/use-local-storage';
 import { useToast } from "@/hooks/use-toast";
-import type { GameMode, Player, ActiveGameData } from '@/lib/gameTypes'; // Updated import
+import type { Player, ActiveGameData } from '@/lib/gameTypes';
 import { CODE_LENGTH, generateSecretCode } from '@/lib/gameLogic';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function EnterCodePage() {
   const [secretCodeInput, setSecretCodeInput] = useState('');
   const [username] = useLocalStorage<string>('locked-codes-username', '');
   const [activeGameData, setActiveGameData] = useLocalStorage<ActiveGameData | null>('locked-codes-active-game', null);
+  const [isLoading, setIsLoading] = useState(true);
   
   const router = useRouter();
   const { toast } = useToast();
@@ -26,12 +28,11 @@ export default function EnterCodePage() {
       return;
     }
     if (!activeGameData || activeGameData.gameMode !== 'computer') {
-      // This page is now primarily for 'vs Computer' mode. 
-      // Multiplayer modes handle code entry in their respective lobbies.
-      // If somehow routed here for MP, redirect.
       toast({title:"Info", description: "Setting up multiplayer game..."});
       router.push('/select-mode'); 
+      return; // Return after navigation to prevent further execution
     }
+    setIsLoading(false);
   }, [username, activeGameData, router, toast]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,7 +51,7 @@ export default function EnterCodePage() {
         secretCode: secretCodeInput,
         guesses: [],
         score: 0,
-        isHost: true, // For computer mode, human is effectively the 'host' of their side
+        isHost: true, 
         isReady: true,
       };
       const computerPlayer: Player = {
@@ -60,13 +61,13 @@ export default function EnterCodePage() {
         guesses: [],
         score: 0,
         isComputer: true,
-        isReady: true, // Computer is always ready
+        isReady: true,
       };
 
       setActiveGameData({
         ...activeGameData,
         players: [humanPlayer, computerPlayer],
-        gameStatus: 'playing', // Game starts immediately for vs Computer
+        gameStatus: 'playing',
       });
       router.push('/game');
     } else {
@@ -82,12 +83,29 @@ export default function EnterCodePage() {
     if (activeGameData?.gameMode === "computer") {
       return `Hi ${username}! Enter a ${CODE_LENGTH}-digit secret code. The computer will try to guess it.`;
     }
-    return "Set up your game."; // Generic fallback
+    return "Set up your game."; 
   };
 
-  if (!username || !activeGameData || activeGameData.gameMode !== 'computer') {
-    // Render minimal UI or loading state if not 'computer' mode or data is missing
-    return <div className="min-h-screen flex items-center justify-center"><p>Loading setup...</p></div>;
+  if (isLoading || !username || !activeGameData || activeGameData.gameMode !== 'computer') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
+        <Skeleton className="h-[100px] w-[180px] mb-8 sm:mb-12" /> 
+        <Card className="w-full max-w-md shadow-2xl">
+          <CardHeader>
+            <Skeleton className="h-8 w-3/4 mx-auto mb-2" />
+            <Skeleton className="h-4 w-full mx-auto" /> 
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-16 w-full" /> 
+            </div>
+            <Skeleton className="h-12 w-full" /> 
+          </CardContent>
+        </Card>
+        <Skeleton className="h-6 w-1/3 mt-4" /> 
+      </div>
+    );
   }
 
   return (

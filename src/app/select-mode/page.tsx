@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import useLocalStorage from '@/hooks/use-local-storage';
 import type { GameMode, MultiplayerRole, Player, ActiveGameData } from '@/lib/gameTypes';
 import { Users, Bot, User, Users2, Home, LogIn, ArrowLeft } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface ModeConfig {
   mode: GameMode;
@@ -35,20 +36,18 @@ export default function SelectModePage() {
   const { toast } = useToast();
   const [username] = useLocalStorage<string>('locked-codes-username', '');
   const [activeGameData, setActiveGameData] = useLocalStorage<ActiveGameData | null>('locked-codes-active-game', null);
-  // This will store all game sessions, keyed by gameId.
-  // Useful for allowing players to join existing games by code.
   const [allGames, setAllGames] = useLocalStorage<Record<string, ActiveGameData>>('locked-codes-all-games', {});
 
   const [expandedMode, setExpandedMode] = useState<GameMode | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!username) {
       router.push('/');
+      return;
     }
-    // Clear any previous active game data when returning to select mode
     setActiveGameData(null);
-    // The lines for gameMode, numberOfPlayers, multiplayerRole that were previously here
-    // are now handled by activeGameData.
+    setIsLoading(false);
   }, [username, router, setActiveGameData]);
 
   const handleModeButtonClick = (config: ModeConfig) => {
@@ -60,15 +59,15 @@ export default function SelectModePage() {
 
     if (!config.isMultiplayer) {
       const gameData: ActiveGameData = {
-        gameId: null, // No gameId for vs Computer directly
+        gameId: null,
         gameMode: config.mode,
         numberOfPlayers: config.players,
         multiplayerRole: null,
-        players: [], // Will be set up in enter-code page for computer mode
+        players: [],
         gameStatus: 'lobby',
       };
       setActiveGameData(gameData);
-      router.push('/enter-code'); // For 'vs Computer', user still enters their code
+      router.push('/enter-code');
     } else {
       setExpandedMode(prev => prev === config.mode ? null : config.mode);
     }
@@ -86,7 +85,7 @@ export default function SelectModePage() {
       const hostPlayer: Player = {
         id: username,
         name: username,
-        secretCode: '', // Host will set this in the lobby
+        secretCode: '',
         guesses: [],
         score: 0,
         isHost: true,
@@ -104,10 +103,9 @@ export default function SelectModePage() {
       setActiveGameData(newGame);
       router.push(`/host-lobby/${gameId}`);
     } else if (role === 'join') {
-      // Set basic info, actual joining logic is on the join page
       setActiveGameData({
-        gameId: null, // Will be set on join page
-        gameMode: mode, // For context, though gameId's data will be primary
+        gameId: null,
+        gameMode: mode,
         numberOfPlayers: numPlayers,
         multiplayerRole: 'join',
         players: [],
@@ -117,8 +115,24 @@ export default function SelectModePage() {
     }
   };
 
-  if (!username) {
-    return <div className="min-h-screen flex items-center justify-center"><p>Loading...</p></div>;
+  if (isLoading || !username) { // Keep loading if username somehow still false
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
+        <Skeleton className="h-[100px] w-[180px] mb-8 sm:mb-12" /> {/* GameLogo placeholder */}
+        <Card className="w-full max-w-md shadow-2xl">
+          <CardHeader>
+            <Skeleton className="h-8 w-3/4 mx-auto mb-2" /> {/* CardTitle placeholder */}
+            <Skeleton className="h-4 w-full mx-auto" /> {/* CardDescription placeholder */}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" /> /* Button placeholder */
+            ))}
+          </CardContent>
+        </Card>
+        <Skeleton className="h-6 w-1/3 mt-4" /> {/* Back button placeholder */}
+      </div>
+    );
   }
 
   return (

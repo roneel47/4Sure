@@ -1,16 +1,17 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import GameLogo from '@/components/game-logo';
 import useLocalStorage from '@/hooks/use-local-storage';
-import type { ActiveGameData, Player, GameMode } from '@/lib/gameTypes';
+import type { ActiveGameData, Player } from '@/lib/gameTypes';
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function JoinGamePage() {
   const [gameCode, setGameCode] = useState('');
@@ -19,7 +20,15 @@ export default function JoinGamePage() {
   const [username] = useLocalStorage<string>('locked-codes-username', '');
   const [activeGameData, setActiveGameData] = useLocalStorage<ActiveGameData | null>('locked-codes-active-game', null);
   const [allGames, setAllGames] = useLocalStorage<Record<string, ActiveGameData>>('locked-codes-all-games', {});
+  const [isLoading, setIsLoading] = useState(true);
 
+  useEffect(() => {
+    if (!username) {
+      router.push('/');
+      return;
+    }
+    setIsLoading(false);
+  }, [username, router]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,18 +46,21 @@ export default function JoinGamePage() {
     const gameToJoin = allGames[codeToJoin];
 
     if (gameToJoin && gameToJoin.numberOfPlayers) {
-      if (gameToJoin.players.length >= gameToJoin.numberOfPlayers) {
+      if (gameToJoin.gameStatus === 'playing') {
+        toast({ title: "Game In Progress", description: "This game has already started.", variant: "destructive" });
+        return;
+      }
+      if (gameToJoin.players.length >= gameToJoin.numberOfPlayers && !gameToJoin.players.find(p => p.id === username)) {
         toast({ title: "Game Full", description: "This game session is already full.", variant: "destructive" });
         return;
       }
       if (gameToJoin.players.find(p => p.id === username)) {
-         toast({ title: "Already Joined", description: "You are already in this game session.", variant: "destructive" });
-         // Allow re-entry to lobby if already part of the game
+         toast({ title: "Already Joined", description: "You are already in this game session. Redirecting to lobby..." });
       } else {
         const newPlayer: Player = {
           id: username,
           name: username,
-          secretCode: '', // To be set in lobby
+          secretCode: '', 
           guesses: [],
           score: 0,
           isReady: false,
@@ -70,6 +82,25 @@ export default function JoinGamePage() {
     }
   };
 
+  if (isLoading) {
+     return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
+        <Skeleton className="h-[100px] w-[180px] mb-8 sm:mb-12" /> 
+        <Card className="w-full max-w-md shadow-2xl">
+          <CardHeader>
+            <Skeleton className="h-8 w-3/4 mx-auto mb-2" />
+            <Skeleton className="h-4 w-full mx-auto" /> 
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Skeleton className="h-12 w-full" /> 
+            <Skeleton className="h-12 w-full" /> 
+          </CardContent>
+        </Card>
+        <Skeleton className="h-6 w-1/3 mt-4" /> 
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
       <GameLogo />
@@ -85,10 +116,11 @@ export default function JoinGamePage() {
             <Input
               type="text"
               value={gameCode}
-              onChange={(e) => setGameCode(e.target.value)}
+              onChange={(e) => setGameCode(e.target.value.toUpperCase())}
               placeholder="Enter Game Code"
               className="text-center text-2xl tracking-wider"
               maxLength={10}
+              autoCapitalize="characters"
             />
             <Button type="submit" className="w-full text-lg py-3 bg-primary hover:bg-primary/90 text-primary-foreground">
               Join
