@@ -1,14 +1,19 @@
-import { Lock } from 'lucide-react';
+import Image from 'next/image';
 
 const GameLogo = ({ size = "default" }: { size?: "default" | "small" }) => {
-  const iconSize = size === "small" ? "w-6 h-6" : "w-10 h-10";
-  const textSize = size === "small" ? "text-2xl" : "text-4xl sm:text-5xl";
+  const imageWidth = size === "small" ? 100 : 180; // Adjusted width for the new logo
+  const imageHeight = size === "small" ? 30 : 54; // Adjusted height for the new logo
   const marginBottom = size === "small" ? "mb-4" : "mb-8 sm:mb-12";
 
   return (
-    <div className={`flex items-center space-x-3 ${marginBottom}`}>
-      <Lock className={`${iconSize} text-primary`} />
-      <h1 className={`${textSize} font-headline font-bold text-primary`}>4Sure</h1>
+    <div className={`flex items-center ${marginBottom}`} data-ai-hint="game logo">
+      <Image
+        src="/4Sure.png"
+        alt="4Sure Game Logo"
+        width={imageWidth}
+        height={imageHeight}
+        priority // Preload logo as it's likely LCP
+      />
     </div>
   );
 };
