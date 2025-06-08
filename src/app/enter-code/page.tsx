@@ -9,32 +9,30 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import GameLogo from '@/components/game-logo';
 import useLocalStorage from '@/hooks/use-local-storage';
 import { useToast } from "@/hooks/use-toast";
-import type { GameMode } from '@/lib/gameTypes';
-
-const CODE_LENGTH = 4;
-
-interface PlayerSetupInfo {
-  name: string;
-  secretCode: string;
-}
+import type { GameMode, Player, ActiveGameData } from '@/lib/gameTypes'; // Updated import
+import { CODE_LENGTH, generateSecretCode } from '@/lib/gameLogic';
 
 export default function EnterCodePage() {
   const [secretCodeInput, setSecretCodeInput] = useState('');
   const [username] = useLocalStorage<string>('locked-codes-username', '');
-  const [gameMode] = useLocalStorage<GameMode | null>('locked-codes-gamemode', null);
-  // For multiplayer, this will eventually hold all player codes. For now, just Player 1.
-  const [, setPlayersSetup] = useLocalStorage<PlayerSetupInfo[]>('locked-codes-players-setup', []); 
+  const [activeGameData, setActiveGameData] = useLocalStorage<ActiveGameData | null>('locked-codes-active-game', null);
+  
   const router = useRouter();
   const { toast } = useToast();
 
   useEffect(() => {
     if (!username) {
       router.push('/');
+      return;
     }
-    if (!gameMode) {
-      router.push('/select-mode');
+    if (!activeGameData || activeGameData.gameMode !== 'computer') {
+      // This page is now primarily for 'vs Computer' mode. 
+      // Multiplayer modes handle code entry in their respective lobbies.
+      // If somehow routed here for MP, redirect.
+      toast({title:"Info", description: "Setting up multiplayer game..."});
+      router.push('/select-mode'); 
     }
-  }, [username, gameMode, router]);
+  }, [username, activeGameData, router, toast]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -45,16 +43,31 @@ export default function EnterCodePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (secretCodeInput.length === CODE_LENGTH && /^\d{4}$/.test(secretCodeInput)) {
-      // For now, we only set up the first player (the current user)
-      // Multiplayer setup will need to be expanded here or on the game page
-      if (username) {
-        setPlayersSetup([{ name: username, secretCode: secretCodeInput }]);
-      }
-      // Keep the old single user secret code for compatibility if needed, or remove if fully migrating
-      localStorage.setItem('locked-codes-secret-code', JSON.stringify(secretCodeInput)); 
+    if (secretCodeInput.length === CODE_LENGTH && /^\d{4}$/.test(secretCodeInput) && username && activeGameData) {
+      const humanPlayer: Player = {
+        id: username,
+        name: username,
+        secretCode: secretCodeInput,
+        guesses: [],
+        score: 0,
+        isHost: true, // For computer mode, human is effectively the 'host' of their side
+        isReady: true,
+      };
+      const computerPlayer: Player = {
+        id: "computer",
+        name: "Computer",
+        secretCode: generateSecretCode(),
+        guesses: [],
+        score: 0,
+        isComputer: true,
+        isReady: true, // Computer is always ready
+      };
 
-
+      setActiveGameData({
+        ...activeGameData,
+        players: [humanPlayer, computerPlayer],
+        gameStatus: 'playing', // Game starts immediately for vs Computer
+      });
       router.push('/game');
     } else {
       toast({
@@ -66,15 +79,15 @@ export default function EnterCodePage() {
   };
 
   const getPageDescription = () => {
-    if (gameMode === "computer") {
+    if (activeGameData?.gameMode === "computer") {
       return `Hi ${username}! Enter a ${CODE_LENGTH}-digit secret code. The computer will try to guess it.`;
     }
-    // For multiplayer, this is Player 1. Further player entries would be handled next.
-    return `Player 1 (${username}), set your ${CODE_LENGTH}-digit secret code.`;
+    return "Set up your game."; // Generic fallback
   };
 
-  if (!username || !gameMode) {
-    return <div className="min-h-screen flex items-center justify-center"><p>Loading...</p></div>;
+  if (!username || !activeGameData || activeGameData.gameMode !== 'computer') {
+    // Render minimal UI or loading state if not 'computer' mode or data is missing
+    return <div className="min-h-screen flex items-center justify-center"><p>Loading setup...</p></div>;
   }
 
   return (

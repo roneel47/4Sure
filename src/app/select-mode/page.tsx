@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import GameLogo from '@/components/game-logo';
 import useLocalStorage from '@/hooks/use-local-storage';
-import type { GameMode, MultiplayerRole } from '@/lib/gameTypes';
-import { Users, Bot, User, Users2, Home, LogIn } from 'lucide-react';
+import type { GameMode, MultiplayerRole, Player, ActiveGameData } from '@/lib/gameTypes';
+import { Users, Bot, User, Users2, Home, LogIn, ArrowLeft } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
 interface ModeConfig {
@@ -26,45 +26,94 @@ const MODE_CONFIGS: ModeConfig[] = [
   { mode: "quads", label: "Quads (4 Players)", players: 4, icon: Users, isMultiplayer: true },
 ];
 
+function generateGameId(): string {
+  return Math.random().toString(36).substr(2, 6).toUpperCase();
+}
+
 export default function SelectModePage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [, setGameMode] = useLocalStorage<GameMode | null>('locked-codes-gamemode', null);
-  const [, setNumberOfPlayers] = useLocalStorage<number | null>('locked-codes-numplayers', null);
   const [username] = useLocalStorage<string>('locked-codes-username', '');
-  const [, setMultiplayerRole] = useLocalStorage<MultiplayerRole | null>('locked-codes-multiplayer-role', null);
-  
+  const [activeGameData, setActiveGameData] = useLocalStorage<ActiveGameData | null>('locked-codes-active-game', null);
+  // This will store all game sessions, keyed by gameId.
+  // Useful for allowing players to join existing games by code.
+  const [allGames, setAllGames] = useLocalStorage<Record<string, ActiveGameData>>('locked-codes-all-games', {});
+
   const [expandedMode, setExpandedMode] = useState<GameMode | null>(null);
 
   React.useEffect(() => {
     if (!username) {
-      router.push('/'); 
+      router.push('/');
     }
-  }, [username, router]);
+    // Clear any previous active game data when returning to select mode
+    setActiveGameData(null);
+    // The lines for gameMode, numberOfPlayers, multiplayerRole that were previously here
+    // are now handled by activeGameData.
+  }, [username, router, setActiveGameData]);
 
   const handleModeButtonClick = (config: ModeConfig) => {
+    if (!username) {
+      toast({ title: "Error", description: "Username not set.", variant: "destructive" });
+      router.push('/');
+      return;
+    }
+
     if (!config.isMultiplayer) {
-      setGameMode(config.mode);
-      setNumberOfPlayers(config.players);
-      setMultiplayerRole(null); // Not a multiplayer role like host/join
-      router.push('/enter-code');
+      const gameData: ActiveGameData = {
+        gameId: null, // No gameId for vs Computer directly
+        gameMode: config.mode,
+        numberOfPlayers: config.players,
+        multiplayerRole: null,
+        players: [], // Will be set up in enter-code page for computer mode
+        gameStatus: 'lobby',
+      };
+      setActiveGameData(gameData);
+      router.push('/enter-code'); // For 'vs Computer', user still enters their code
     } else {
       setExpandedMode(prev => prev === config.mode ? null : config.mode);
     }
   };
 
   const handleMultiplayerOptionSelect = (mode: GameMode, numPlayers: number, role: MultiplayerRole) => {
-    setGameMode(mode);
-    setNumberOfPlayers(numPlayers);
-    setMultiplayerRole(role);
+    if (!username) {
+      toast({ title: "Error", description: "Username not set.", variant: "destructive" });
+      router.push('/');
+      return;
+    }
+    
     if (role === 'host') {
-      router.push('/enter-code');
-    } else { // 'join'
-      toast({
-        title: "Joining Game",
-        description: "Functionality to join a game is coming soon!",
+      const gameId = generateGameId();
+      const hostPlayer: Player = {
+        id: username,
+        name: username,
+        secretCode: '', // Host will set this in the lobby
+        guesses: [],
+        score: 0,
+        isHost: true,
+        isReady: false,
+      };
+      const newGame: ActiveGameData = {
+        gameId: gameId,
+        gameMode: mode,
+        numberOfPlayers: numPlayers,
+        multiplayerRole: 'host',
+        players: [hostPlayer],
+        gameStatus: 'lobby',
+      };
+      setAllGames(prev => ({ ...prev, [gameId]: newGame }));
+      setActiveGameData(newGame);
+      router.push(`/host-lobby/${gameId}`);
+    } else if (role === 'join') {
+      // Set basic info, actual joining logic is on the join page
+      setActiveGameData({
+        gameId: null, // Will be set on join page
+        gameMode: mode, // For context, though gameId's data will be primary
+        numberOfPlayers: numPlayers,
+        multiplayerRole: 'join',
+        players: [],
+        gameStatus: 'lobby',
       });
-      setExpandedMode(null); // Collapse after selection
+      router.push('/join-game');
     }
   };
 
@@ -116,7 +165,7 @@ export default function SelectModePage() {
         </CardContent>
       </Card>
       <Button variant="link" onClick={() => router.push('/')} className="mt-4 text-sm text-muted-foreground">
-        Change Username
+         <ArrowLeft className="mr-2 h-4 w-4" /> Change Username
       </Button>
     </div>
   );

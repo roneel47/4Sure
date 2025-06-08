@@ -11,32 +11,22 @@ import PlayerPanel from './components/PlayerPanel';
 import GuessInput from './components/GuessInput';
 import TurnIndicator from './components/TurnIndicator';
 import GameEndDialog from './components/GameEndDialog';
-import type { Guess, Player, GameMode } from '@/lib/gameTypes';
-import { CODE_LENGTH, generateSecretCode, calculateFeedback, checkWin, generateComputerGuess, calculatePlayerScore } from '@/lib/gameLogic';
+import type { Guess, Player, GameMode, ActiveGameData } from '@/lib/gameTypes';
+import { CODE_LENGTH, calculateFeedback, checkWin, generateComputerGuess, calculatePlayerScore, generateSecretCode } from '@/lib/gameLogic';
 import { LogOut } from 'lucide-react';
 
-const COMPUTER_PLAYER_NAME = "Computer";
-const MAX_DISPLAY_GUESSES = 5; // This will be handled by PlayerPanel and state updates
 const REVEAL_DELAY_MS = 3000;
-
-interface PlayerSetupInfo {
-  name: string;
-  secretCode: string;
-}
 
 export default function GamePage() {
   const router = useRouter();
   const { toast } = useToast();
 
   const [username] = useLocalStorage<string>('locked-codes-username', '');
-  const [userSecretCode] = useLocalStorage<string>('locked-codes-secret-code', ''); // Legacy, P1's code
-  const [gameMode] = useLocalStorage<GameMode | null>('locked-codes-gamemode', "computer");
-  const [playersSetup] = useLocalStorage<PlayerSetupInfo[]>('locked-codes-players-setup', []);
-
-
+  const [activeGameData, setActiveGameData] = useLocalStorage<ActiveGameData | null>('locked-codes-active-game', null);
+  
   const [players, setPlayers] = useState<Player[]>([]);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState<number>(0);
-  const [winner, setWinner] = useState<Player | null>(null); // Store the winning player object
+  const [winner, setWinner] = useState<Player | null>(null);
   const [isGameEndDialogOpen, setIsGameEndDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [revealCodes, setRevealCodes] = useState<boolean>(false);
@@ -44,72 +34,101 @@ export default function GamePage() {
 
 
   const initializeGame = useCallback(() => {
-    if (!username || !gameMode) {
-      toast({ title: "Error", description: "User or game mode not found. Redirecting...", variant: "destructive" });
+    setIsLoading(true);
+    if (!username || !activeGameData || !activeGameData.players || activeGameData.players.length === 0) {
+      toast({ title: "Error", description: "Game data not found or incomplete. Redirecting to setup...", variant: "destructive" });
       router.push('/');
       return;
     }
+    
+    // For multiplayer, players are already set up in activeGameData from lobby
+    // For 'vs Computer', players were set up in enter-code page
+    setPlayers(activeGameData.players);
 
-    let initialPlayers: Player[] = [];
-    if (gameMode === "computer") {
-      const p1Code = playersSetup.find(p => p.name === username)?.secretCode || userSecretCode || generateSecretCode(); // Fallback
-      initialPlayers = [
-        { id: "player1", name: username, secretCode: p1Code, guesses: [], score: 0 },
-        { id: "computer", name: COMPUTER_PLAYER_NAME, secretCode: generateSecretCode(), guesses: [], score: 0, isComputer: true }
-      ];
-      setTargetPlayerIndices([1, 0]); // P1 targets Computer (idx 1), Computer targets P1 (idx 0)
+    // Determine target indices for guessing
+    // This logic needs to be more robust for various multiplayer modes (duo, trio, quads)
+    // For now, a simple P1 vs P2 (or P1 vs Computer) logic.
+    if (activeGameData.players.length >= 2) {
+      if (activeGameData.gameMode === 'computer') {
+        setTargetPlayerIndices([1, 0]); // P1 targets Computer (idx 1), Computer targets P1 (idx 0)
+      } else { // Multiplayer modes (Duo, Trio, Quads)
+        // Simplified: P1 targets P2, P2 targets P1. 
+        // More complex targeting (e.g., round-robin for Trio/Quads) can be added later.
+        // For now, this makes it playable for 2 human players.
+        // If more than 2 players, this targeting is not fully representative of all interactions.
+        const indices = activeGameData.players.map((_, i, arr) => (i + 1) % arr.length);
+        setTargetPlayerIndices(indices);
+
+        // Example for Trio: P0->P1, P1->P2, P2->P0
+        // if (activeGameData.numberOfPlayers === 3) setTargetPlayerIndices([1, 2, 0]);
+        // Example for Quads: P0->P1, P1->P2, P2->P3, P3->P0
+        // if (activeGameData.numberOfPlayers === 4) setTargetPlayerIndices([1, 2, 3, 0]);
+      }
     } else {
-      // Basic multiplayer setup (still defaults to 1v1 vs Computer for now for actual gameplay)
-      // This part needs significant expansion for true multiplayer code entry and player management
-      const p1Code = playersSetup.find(p => p.name === username)?.secretCode || userSecretCode || generateSecretCode();
-      initialPlayers = [
-        { id: "player1", name: username, secretCode: p1Code, guesses: [], score: 0 },
-        // Placeholder for other players; for now, computer acts as opponent
-        { id: "computer", name: `Opponent (Computer)`, secretCode: generateSecretCode(), guesses: [], score: 0, isComputer: true }
-      ];
-       setTargetPlayerIndices([1, 0]); // P1 targets "Opponent", "Opponent" targets P1
-
-      if (gameMode === "duo" && initialPlayers.length < 2) { /* Add P2 if not computer */ }
-      // Similar logic for trio, quads to setup players and target indices (e.g. P1->P2, P2->P1 or P1->P2, P2->P3, P3->P1)
-      // This is where actual multiplayer setup would create Player objects based on `playersSetup` or prompt for more.
+      // Fallback or error for insufficient players
+      setTargetPlayerIndices([]);
     }
-
-    setPlayers(initialPlayers);
-    setCurrentPlayerIndex(0); // Player 1 (human) starts
+    
+    setCurrentPlayerIndex(0); // First player in the list starts (could be host, or first human)
     setWinner(null);
     setIsGameEndDialogOpen(false);
     setRevealCodes(false);
     setIsLoading(false);
 
-  }, [username, userSecretCode, gameMode, playersSetup, router, toast]);
+  }, [username, activeGameData, router, toast]);
 
   useEffect(() => {
     initializeGame();
   }, [initializeGame]);
-
+  
   useEffect(() => {
-    if (winner && revealCodes) {
+    if (winner && !isGameEndDialogOpen) { // Only trigger dialog if not already open and codes are revealed
       const timer = setTimeout(() => {
         setIsGameEndDialogOpen(true);
       }, REVEAL_DELAY_MS);
       return () => clearTimeout(timer);
     }
-  }, [winner, revealCodes]);
+  }, [winner, isGameEndDialogOpen, revealCodes]);
+
 
   const getCurrentPlayer = () => players[currentPlayerIndex];
-  const getTargetPlayer = () => players[targetPlayerIndices[currentPlayerIndex]];
+  const getTargetPlayer = () => {
+    if(targetPlayerIndices.length > currentPlayerIndex && players.length > targetPlayerIndices[currentPlayerIndex]){
+        return players[targetPlayerIndices[currentPlayerIndex]];
+    }
+    return null; // Should not happen in a well-formed game
+  }
+
+
+  const updatePlayerInGameData = (playerId: string, updatedGuessData: {guesses: Guess[], score: number}) => {
+    if(activeGameData){
+        const updatedPlayers = activeGameData.players.map(p => 
+            p.id === playerId ? {...p, guesses: updatedGuessData.guesses, score: updatedGuessData.score } : p
+        );
+        setActiveGameData({...activeGameData, players: updatedPlayers});
+        // Also update the master list of games if gameId exists
+        if(activeGameData.gameId){
+            const allGames = JSON.parse(localStorage.getItem('locked-codes-all-games') || '{}') as Record<string, ActiveGameData>;
+            if(allGames[activeGameData.gameId]){
+                allGames[activeGameData.gameId].players = updatedPlayers;
+                localStorage.setItem('locked-codes-all-games', JSON.stringify(allGames));
+            }
+        }
+    }
+  }
+
 
   const handlePlayerGuess = (guessValue: string) => {
-    if (winner || !getCurrentPlayer() || getCurrentPlayer().isComputer || !getTargetPlayer()) return;
+    const currentPlayer = getCurrentPlayer();
+    const targetPlayer = getTargetPlayer();
+
+    if (winner || !currentPlayer || currentPlayer.isComputer || !targetPlayer) return;
 
     if (guessValue.length !== CODE_LENGTH || !/^\d+$/.test(guessValue)) {
       toast({ title: "Invalid Guess", description: `Guess must be ${CODE_LENGTH} digits.`, variant: "destructive" });
       return;
     }
     
-    const currentPlayer = getCurrentPlayer();
-    const targetPlayer = getTargetPlayer();
-
     const feedback = calculateFeedback(guessValue, targetPlayer.secretCode);
     const newGuess: Guess = { 
       id: `${currentPlayer.id}-${Date.now()}`, 
@@ -119,32 +138,32 @@ export default function GamePage() {
       isPlayer: !currentPlayer.isComputer 
     };
     
+    const updatedPlayerGuesses = [...currentPlayer.guesses, newGuess];
+    const updatedPlayerScore = calculatePlayerScore(updatedPlayerGuesses);
+
     setPlayers(prevPlayers => prevPlayers.map((p, index) => {
       if (index === currentPlayerIndex) {
-        const updatedGuesses = [...p.guesses, newGuess];
-        return {
-          ...p,
-          guesses: updatedGuesses.length > MAX_DISPLAY_GUESSES ? updatedGuesses.slice(-MAX_DISPLAY_GUESSES) : updatedGuesses,
-          score: calculatePlayerScore([...p.guesses, newGuess]) // Recalculate score with new guess
-        };
+        return { ...p, guesses: updatedPlayerGuesses, score: updatedPlayerScore };
       }
       return p;
     }));
+    updatePlayerInGameData(currentPlayer.id, {guesses: updatedPlayerGuesses, score: updatedPlayerScore});
+
 
     if (checkWin(feedback)) {
       setWinner(currentPlayer);
-      setRevealCodes(true);
+      setRevealCodes(true); // Reveal codes immediately on win
     } else {
       setCurrentPlayerIndex((prevIndex) => (prevIndex + 1) % players.length);
     }
   };
 
   const makeComputerGuessAgainstTarget = useCallback(() => {
-    if (winner || !getCurrentPlayer() || !getCurrentPlayer().isComputer || !getTargetPlayer()) return;
-
     const computerPlayer = getCurrentPlayer();
-    const targetHumanPlayer = getTargetPlayer(); // Computer always targets a human in this simplified setup
+    const targetHumanPlayer = getTargetPlayer();
 
+    if (winner || !computerPlayer || !computerPlayer.isComputer || !targetHumanPlayer) return;
+    
     const previousComputerGuessValues = computerPlayer.guesses.map(g => g.value);
     const computerGuessValue = generateComputerGuess(previousComputerGuessValues);
     const feedback = calculateFeedback(computerGuessValue, targetHumanPlayer.secretCode);
@@ -156,17 +175,17 @@ export default function GamePage() {
       isPlayer: false 
     };
     
+    const updatedPlayerGuesses = [...computerPlayer.guesses, newGuess];
+    const updatedPlayerScore = calculatePlayerScore(updatedPlayerGuesses);
+
     setPlayers(prevPlayers => prevPlayers.map((p, index) => {
       if (index === currentPlayerIndex) {
-         const updatedGuesses = [...p.guesses, newGuess];
-        return {
-          ...p,
-          guesses: updatedGuesses.length > MAX_DISPLAY_GUESSES ? updatedGuesses.slice(-MAX_DISPLAY_GUESSES) : updatedGuesses,
-          score: calculatePlayerScore([...p.guesses, newGuess])
-        };
+        return { ...p, guesses: updatedPlayerGuesses, score: updatedPlayerScore };
       }
       return p;
     }));
+    updatePlayerInGameData(computerPlayer.id, {guesses: updatedPlayerGuesses, score: updatedPlayerScore});
+
 
     toast({
       title: `${computerPlayer.name} Guessed!`,
@@ -175,14 +194,15 @@ export default function GamePage() {
 
     if (checkWin(feedback)) {
       setWinner(computerPlayer);
-      setRevealCodes(true);
+      setRevealCodes(true); // Reveal codes immediately
     } else {
       setCurrentPlayerIndex((prevIndex) => (prevIndex + 1) % players.length);
     }
-  }, [players, currentPlayerIndex, targetPlayerIndices, toast, winner]);
+  }, [players, currentPlayerIndex, targetPlayerIndices, toast, winner, setActiveGameData, activeGameData]);
 
   useEffect(() => {
-    if (isLoading || players.length === 0) return;
+    if (isLoading || players.length === 0 || !activeGameData) return;
+    
     const currentPlayer = players[currentPlayerIndex];
     if (currentPlayer?.isComputer && !winner) {
       const timer = setTimeout(() => {
@@ -190,34 +210,57 @@ export default function GamePage() {
       }, 1500); 
       return () => clearTimeout(timer);
     }
-  }, [currentPlayerIndex, players, winner, makeComputerGuessAgainstTarget, isLoading]);
+  }, [currentPlayerIndex, players, winner, makeComputerGuessAgainstTarget, isLoading, activeGameData]);
 
   const handlePlayAgain = () => {
-    initializeGame();
+    setIsGameEndDialogOpen(false); // Close dialog first
+    setWinner(null);
+    setRevealCodes(false);
+    // For multiplayer, host might decide to play again, which needs more complex logic.
+    // For now, play again sends to select mode.
+    if (activeGameData && activeGameData.gameId) { // Multiplayer game
+        // Reset player states for a new round IF keeping the same lobby
+        // Or navigate to select-mode to form a new game
+         setActiveGameData(prev => prev ? {...prev, gameStatus: 'lobby', players: prev.players.map(p => ({...p, guesses:[], score:0, isReady: p.isHost ? true : false, secretCode: p.isHost ? p.secretCode : ''}))} : null ); // Host keeps code, others reset
+         
+         // Update allGames as well
+        if(activeGameData.gameId && localStorage.getItem('locked-codes-all-games')){
+             const allGames = JSON.parse(localStorage.getItem('locked-codes-all-games')!) as Record<string, ActiveGameData>;
+             if(allGames[activeGameData.gameId]){
+                 allGames[activeGameData.gameId].gameStatus = 'lobby';
+                 allGames[activeGameData.gameId].players = allGames[activeGameData.gameId].players.map(p => ({...p, guesses:[], score:0, isReady: p.isHost ? true : false, secretCode: p.isHost ? p.secretCode : ''}));
+                 localStorage.setItem('locked-codes-all-games', JSON.stringify(allGames));
+             }
+        }
+
+
+        if(activeGameData.multiplayerRole === 'host'){
+            router.push(`/host-lobby/${activeGameData.gameId}`);
+        } else {
+             router.push(`/player-lobby/${activeGameData.gameId}`);
+        }
+
+    } else { // 'vs Computer' mode
+        router.push('/select-mode'); // Go back to select mode to start fresh
+    }
   };
 
   const handleExitGame = () => {
-    // Clear only game-specific localStorage items if desired, or all related
-    localStorage.removeItem('locked-codes-secret-code');
-    localStorage.removeItem('locked-codes-gamemode');
-    localStorage.removeItem('locked-codes-numplayers');
-    localStorage.removeItem('locked-codes-players-setup');
-    // Username is kept for convenience
-    setPlayers([]);
-    setWinner(null);
-    setRevealCodes(false);
+    // Clear active game data, player keeps username
+    setActiveGameData(null);
+    // Optionally, if host exits, the game in 'allGames' could be marked as abandoned or removed.
+    // This is complex, for now, just clears active game for this user.
     router.push('/');
   };
   
   const leaderboardData = players.map(p => ({ name: p.name, score: p.score })).sort((a,b) => b.score - a.score);
 
-
-  if (isLoading || players.length === 0) {
+  if (isLoading || players.length === 0 || !activeGameData) {
     return <div className="min-h-screen flex items-center justify-center"><p className="text-xl">Loading Game...</p></div>;
   }
   
   const activePlayer = players[currentPlayerIndex];
-  const isMyTurn = activePlayer && !activePlayer.isComputer && !winner;
+  const isMyTurn = activePlayer && activePlayer.id === username && !activePlayer.isComputer && !winner;
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4 sm:p-6 bg-background">
@@ -232,7 +275,7 @@ export default function GamePage() {
       {activePlayer && (
         <TurnIndicator 
           currentPlayerName={activePlayer.name}
-          isPlayerTurn={!activePlayer.isComputer && !winner}
+          isPlayerTurn={activePlayer.id === username && !activePlayer.isComputer && !winner}
         />
       )}
 
@@ -243,7 +286,7 @@ export default function GamePage() {
             playerName={player.name}
             guesses={player.guesses}
             isCurrentTurn={index === currentPlayerIndex && !winner}
-            secretCodeToDisplay={revealCodes ? player.secretCode : (player.isComputer ? "****" : "Your Code (Hidden)")} 
+            secretCodeToDisplay={revealCodes || player.id === username || (winner && player.isComputer) ? player.secretCode : "****"} 
           />
         ))}
       </main>
@@ -263,4 +306,3 @@ export default function GamePage() {
     </div>
   );
 }
-
