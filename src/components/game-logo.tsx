@@ -8,7 +8,7 @@ const GameLogo = ({ size = "default" }: { size?: "default" | "small" }) => {
   return (
     <div className={`flex items-center space-x-3 ${marginBottom}`}>
       <Lock className={`${iconSize} text-primary`} />
-      <h1 className={`${textSize} font-headline font-bold text-primary`}>Locked Codes</h1>
+      <h1 className={`${textSize} font-headline font-bold text-primary`}>4Sure</h1>
     </div>
   );
 };
