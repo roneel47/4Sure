@@ -34,6 +34,26 @@ export default function GamePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [revealCodes, setRevealCodes] = useState<boolean>(false);
 
+  // Refs for values needed in callbacks that shouldn't cause callback re-creation
+  const playersRef = useRef(players);
+  const winnerRef = useRef(winner);
+  const gameModeRef = useRef(activeGameData?.gameMode);
+  const numPlayersRef = useRef(activeGameData?.players?.length);
+
+  useEffect(() => {
+    playersRef.current = players;
+  }, [players]);
+
+  useEffect(() => {
+    winnerRef.current = winner;
+  }, [winner]);
+
+  useEffect(() => {
+    gameModeRef.current = activeGameData?.gameMode;
+    numPlayersRef.current = activeGameData?.players?.length;
+  }, [activeGameData?.gameMode, activeGameData?.players?.length]);
+
+
   const initializeGame = useCallback(() => {
     setIsLoading(true);
     if (!username || !activeGameData || !activeGameData.players || activeGameData.players.length === 0 || activeGameData.gameStatus !== 'playing') {
@@ -95,40 +115,35 @@ export default function GamePage() {
     });
   }, [setActiveGameData]);
 
-  const gameModeFromActiveData = activeGameData?.gameMode;
-  const numPlayersFromActiveData = activeGameData?.players?.length;
 
   const advanceTurn = useCallback(() => {
-    const gameModeForTurnLogic = gameModeFromActiveData;
-    const numPlayersForTurnLogic = numPlayersFromActiveData;
+    const currentNumPlayers = numPlayersRef.current;
+    const currentGameMode = gameModeRef.current;
 
-    if (!gameModeForTurnLogic || !numPlayersForTurnLogic || numPlayersForTurnLogic <= 1) return;
+    if (!currentGameMode || !currentNumPlayers || currentNumPlayers <= 1) return;
 
     setCurrentPlayerIndex(prevPlayerIndex => {
-      const nextPlayerIdx = (prevPlayerIndex + 1) % numPlayersForTurnLogic;
+      const nextPlayerIdx = (prevPlayerIndex + 1) % currentNumPlayers;
       
-      if (gameModeForTurnLogic === 'computer') {
-        // Human (0) will target Computer (1). Computer (1) will target Human (0).
-        // This sets the target for the player whose turn it *will be* (nextPlayerIdx).
+      if (currentGameMode === 'computer') {
         setCurrentTargetIndex(nextPlayerIdx === 0 ? 1 : 0); 
       } else {
-        // Multiplayer logic for target index
-        let nextTargetIdxVal = (nextPlayerIdx + 1) % numPlayersForTurnLogic;
-        if (nextTargetIdxVal === nextPlayerIdx && numPlayersForTurnLogic > 1) { 
-          nextTargetIdxVal = (nextTargetIdxVal + 1) % numPlayersForTurnLogic;
+        let nextTargetIdxVal = (nextPlayerIdx + 1) % currentNumPlayers;
+        if (nextTargetIdxVal === nextPlayerIdx && currentNumPlayers > 1) { 
+          nextTargetIdxVal = (nextTargetIdxVal + 1) % currentNumPlayers;
         }
         setCurrentTargetIndex(nextTargetIdxVal);
       }
       return nextPlayerIdx;
     });
-  }, [gameModeFromActiveData, numPlayersFromActiveData, setCurrentPlayerIndex, setCurrentTargetIndex]);
+  }, [setCurrentPlayerIndex, setCurrentTargetIndex]); 
 
 
   const handlePlayerGuess = (guessValue: string) => {
-    const currentPlayer = players[currentPlayerIndex];
-    const targetPlayer = players[currentTargetIndex];
+    const currentPlayer = playersRef.current[currentPlayerIndex];
+    const targetPlayer = playersRef.current[currentTargetIndex];
 
-    if (winner || !currentPlayer || currentPlayer.isComputer || !targetPlayer || !targetPlayer.secretCode) return;
+    if (winnerRef.current || !currentPlayer || currentPlayer.isComputer || !targetPlayer || !targetPlayer.secretCode) return;
 
     if (guessValue.length !== CODE_LENGTH || !/^\d+$/.test(guessValue)) {
       toast({ title: "Invalid Guess", description: `Guess must be ${CODE_LENGTH} digits.`, variant: "destructive" });
@@ -160,42 +175,33 @@ export default function GamePage() {
       advanceTurn();
     }
   };
-
-  const playersRef = useRef(players);
-  const winnerRef = useRef(winner);
-
-  useEffect(() => {
-    playersRef.current = players;
-  }, [players]);
-
-  useEffect(() => {
-    winnerRef.current = winner;
-  }, [winner]);
-
+  
   const makeComputerGuess = useCallback(() => {
-    const currentPlayers = playersRef.current;
-    const gameWinner = winnerRef.current;
+    const currentPlayersDirect = playersRef.current; 
+    const gameWinnerDirect = winnerRef.current; 
+    const currentGameModeDirect = gameModeRef.current; 
 
-    // In 'computer' mode, currentPlayerIndex will be the computer's index (e.g., 1)
-    // The computer (at currentPlayerIndex) targets the other player (human at index 0)
-    const computerPlayer = currentPlayers[currentPlayerIndex];
-    const targetHumanPlayer = currentPlayers[currentPlayerIndex === 0 ? 1 : 0]; // Human is the other player
+    if (gameWinnerDirect || !currentPlayersDirect || currentPlayersDirect.length < 2 || currentGameModeDirect !== 'computer') {
+      return;
+    }
 
-    if (gameWinner || !computerPlayer || !computerPlayer.isComputer || !targetHumanPlayer || !targetHumanPlayer.secretCode) {
+    // currentPlayerIndex is the computer's index when this is called
+    const computerPlayer = currentPlayersDirect[currentPlayerIndex]; 
+    // In 'vs Computer', human is index 0, computer is index 1. If computer is current (1), target is (0).
+    const humanPlayer = currentPlayersDirect[currentPlayerIndex === 0 ? 1 : 0]; 
+
+    if (!computerPlayer || !computerPlayer.isComputer || !humanPlayer || !humanPlayer.secretCode) {
       return;
     }
     
-    const previousComputerGuessValues = computerPlayer.guesses
-        .filter(g => g.targetId === targetHumanPlayer.id)
-        .map(g => g.value);
-
+    const previousComputerGuessValues = computerPlayer.guesses.map(g => g.value);
     const computerGuessValue = generateComputerGuess(previousComputerGuessValues);
-    const feedback = calculateFeedback(computerGuessValue, targetHumanPlayer.secretCode);
+    const feedback = calculateFeedback(computerGuessValue, humanPlayer.secretCode);
     
     const newGuess: Guess = { 
-      id: `comp-vs-${targetHumanPlayer.id}-${Date.now()}`, 
+      id: `comp-vs-${humanPlayer.id}-${Date.now()}`, 
       guesserId: computerPlayer.id,
-      targetId: targetHumanPlayer.id,
+      targetId: humanPlayer.id,
       value: computerGuessValue, 
       feedback, 
       isPlayer: false 
@@ -204,18 +210,14 @@ export default function GamePage() {
     const updatedComputerGuesses = [...computerPlayer.guesses, newGuess];
     const updatedComputerScore = calculatePlayerScore(updatedComputerGuesses);
 
-    setPlayers(prev => {
-      const compPlayerId = prev[currentPlayerIndex]?.id;
-      if (!compPlayerId) return prev;
-      return prev.map(p =>
-        p.id === compPlayerId ? { ...p, guesses: updatedComputerGuesses, score: updatedComputerScore } : p
-      );
-    });
+    setPlayers(prev => prev.map(p =>
+        p.id === computerPlayer.id ? { ...p, guesses: updatedComputerGuesses, score: updatedComputerScore } : p
+    ));
     updatePlayerInGameDataFunctional(computerPlayer.id, {guesses: updatedComputerGuesses, score: updatedComputerScore});
 
     toast({
       title: `${computerPlayer.name} Guessed!`,
-      description: `${computerPlayer.name} guessed: ${computerGuessValue} against ${targetHumanPlayer.name}`,
+      description: `${computerPlayer.name} guessed: ${computerGuessValue} against ${humanPlayer.name}`,
     });
 
     if (checkWin(feedback)) {
@@ -224,11 +226,12 @@ export default function GamePage() {
     } else {
       advanceTurn();
     }
-  }, [ currentPlayerIndex, winner, toast, updatePlayerInGameDataFunctional, advanceTurn ]); 
+  }, [currentPlayerIndex, toast, updatePlayerInGameDataFunctional, advanceTurn, setPlayers, setWinner, setRevealCodes ]); 
   
   useEffect(() => {
-    const currentPlayer = players[currentPlayerIndex];
-    if (!isLoading && currentPlayer?.isComputer && !winner) {
+    const currentPlayerEntity = players[currentPlayerIndex];
+    
+    if (!isLoading && currentPlayerEntity?.isComputer && !winner) {
       const timer = setTimeout(() => {
         makeComputerGuess();
       }, 1500); 
@@ -277,9 +280,8 @@ export default function GamePage() {
             } else { 
                 router.push('/select-mode');
             }
-        } else { // Vs Computer mode
-            // For 'vs Computer', we can navigate to enter-code or directly re-initialize here
-             router.push('/enter-code'); // Simplest is to go back to code entry
+        } else { 
+             router.push('/enter-code');
         }
     } else { 
         router.push('/select-mode'); 
@@ -287,7 +289,22 @@ export default function GamePage() {
   };
 
   const handleExitGame = () => {
-    setActiveGameData(null);
+    setActiveGameData(null); 
+    if (activeGameData && activeGameData.gameId && activeGameData.multiplayerRole) {
+        const allGamesStored = localStorage.getItem('locked-codes-all-games');
+        if (allGamesStored) {
+            const allGames = JSON.parse(allGamesStored) as Record<string, ActiveGameData>;
+            if (allGames[activeGameData.gameId]) {
+                allGames[activeGameData.gameId].players = allGames[activeGameData.gameId].players.filter(p => p.id !== username);
+                if (allGames[activeGameData.gameId].players.length === 0 && activeGameData.multiplayerRole === 'host') { // Only host can effectively "delete" the game by being last one out or explicitly
+                     delete allGames[activeGameData.gameId];
+                } else if (allGames[activeGameData.gameId].players.length === 0) { // If a joiner is last, game might still persist if host is expected
+                     delete allGames[activeGameData.gameId]; // Or mark as abandoned
+                }
+                localStorage.setItem('locked-codes-all-games', JSON.stringify(allGames));
+            }
+        }
+    }
     router.push('/');
   };
   
@@ -334,35 +351,29 @@ export default function GamePage() {
   const turnIndicatorTargetName = playerBeingGuessed ? playerBeingGuessed.name : "Someone";
   
   let turnIndicatorText = `Waiting for ${turnIndicatorPlayerName}...`;
-  if(isMyTurnToGuess && playerBeingGuessed){
+  if(winner){
+    turnIndicatorText = winner.id === username ? "You cracked the code!" : `${winner.name} cracked the code!`;
+  } else if(isMyTurnToGuess && playerBeingGuessed){
     turnIndicatorText = `Your Turn, ${turnIndicatorPlayerName}! Guess ${turnIndicatorTargetName}'s code.`;
   } else if (activePlayerToGuess && playerBeingGuessed && activePlayerToGuess.isComputer) {
     turnIndicatorText = `${turnIndicatorPlayerName} is thinking...`;
-  } else if (activePlayerToGuess && playerBeingGuessed) {
+  } else if (activePlayerToGuess && playerBeingGuessed) { // Other player's turn (multiplayer)
     turnIndicatorText = `${turnIndicatorPlayerName} is guessing ${turnIndicatorTargetName}'s code...`;
   }
 
+
   const getDynamicGridClasses = () => {
     const num = players.length;
-    let lgColsClass = 'lg:grid-cols-2'; 
-    let xlColsClass = '';
-
-    if (num === 1) {
-      lgColsClass = 'lg:grid-cols-1';
-      xlColsClass = 'xl:grid-cols-1';
-    } else if (num === 2) {
-      xlColsClass = 'xl:grid-cols-2';
-    } else if (num === 3) {
-      xlColsClass = 'xl:grid-cols-3';
-    } else if (num >= 4) {
-      xlColsClass = 'xl:grid-cols-4';
-    }
-    return `${lgColsClass} ${xlColsClass}`;
+    if (num === 1) return "md:grid-cols-1 lg:grid-cols-1 xl:grid-cols-1";
+    if (num === 2) return "md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2";
+    if (num === 3) return "md:grid-cols-1 lg:grid-cols-3 xl:grid-cols-3"; // 3 cols on large, 1 on md to prevent squishing
+    if (num >= 4) return "md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4"; // 2 on md/lg, 4 on xl
+    return "md:grid-cols-2"; // Default
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4 sm:p-6 bg-background">
-      <header className="w-full max-w-4xl flex justify-between items-center mb-4">
+      <header className="w-full max-w-5xl flex justify-between items-center mb-4">
         <GameLogo size="small" />
         <Button variant="destructive" onClick={handleExitGame} size="sm">
           <LogOut className="w-4 h-4 mr-2" />
@@ -370,7 +381,7 @@ export default function GamePage() {
         </Button>
       </header>
 
-      {activePlayerToGuess && playerBeingGuessed && (
+      {activePlayerToGuess && ( 
         <div className="my-4 sm:my-6 p-3 rounded-md bg-card border border-border shadow-md w-full max-w-lg text-center">
             <p className={`text-lg sm:text-xl font-semibold ${isMyTurnToGuess ? 'text-primary' : 'text-muted-foreground'}`}>
                 {turnIndicatorText}
@@ -378,32 +389,20 @@ export default function GamePage() {
         </div>
       )}
 
-      <main className={`w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 ${getDynamicGridClasses()} gap-4 sm:gap-6 mb-6 auto-rows-fr`}>
-        {players.map((player) => {
-            const guessesByThisPlayer = player.guesses.filter(g => {
-                if(activeGameData.gameMode === 'computer'){
-                    if (player.id === username) { 
-                        return g.targetId === players.find(p=>p.isComputer)?.id;
-                    } else if (player.isComputer) { 
-                        return g.targetId === players.find(p=>p.id === username)?.id;
-                    }
-                }
-                return g.guesserId === player.id; 
-            });
-            return (
-              <PlayerPanel
+      <main className={`w-full max-w-5xl grid grid-cols-1 ${getDynamicGridClasses()} gap-4 sm:gap-6 mb-6 auto-rows-fr`}>
+        {players.map((player) => (
+            <PlayerPanel
                 key={player.id}
                 playerName={player.name + (player.id === username ? " (You)" : "")}
-                guesses={guessesByThisPlayer} 
+                guesses={player.guesses} 
                 isCurrentTurn={player.id === activePlayerToGuess?.id && !winner}
                 secretCodeToDisplay={revealCodes || player.id === username || (winner && player.isComputer) ? player.secretCode : "****"} 
-              />
-            );
-        })}
+            />
+        ))}
       </main>
 
       {isMyTurnToGuess && playerBeingGuessed && ( 
-        <GuessInput onSubmitGuess={handlePlayerGuess} disabled={!isMyTurnToGuess || revealCodes} />
+        <GuessInput onSubmitGuess={handlePlayerGuess} disabled={!isMyTurnToGuess || revealCodes || !!winner} />
       )}
       
       <GameEndDialog
@@ -417,5 +416,7 @@ export default function GamePage() {
     </div>
   );
 }
-
+        
+        
+        
       
