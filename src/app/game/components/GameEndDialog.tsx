@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -14,13 +15,13 @@ import { Button } from "@/components/ui/button";
 
 interface GameEndDialogProps {
   isOpen: boolean;
-  onClose: () => void; // Typically to set isOpen to false, might not be needed if only controlled by winner state
-  winnerName: string | null; // null if draw or game exited early (not implemented)
+  onClose: () => void; 
+  winnerName: string | null; 
   onPlayAgain: () => void;
   onExitGame: () => void;
 }
 
-export default function GameEndDialog({ isOpen, winnerName, onPlayAgain, onExitGame }: GameEndDialogProps) {
+export default function GameEndDialog({ isOpen, winnerName, onPlayAgain, onExitGame, onClose }: GameEndDialogProps) {
   if (!isOpen) return null;
 
   let titleText = "Game Over!";
@@ -30,7 +31,7 @@ export default function GameEndDialog({ isOpen, winnerName, onPlayAgain, onExitG
     titleText = `${winnerName} Wins!`;
     descriptionText = `Congratulations to ${winnerName} for cracking the code!`;
   } else {
-    descriptionText = "The game has ended."; // Fallback or for future draw scenarios
+    descriptionText = "The game has ended."; 
   }
 
 
