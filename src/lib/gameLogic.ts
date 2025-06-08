@@ -40,19 +40,21 @@ export function generateComputerGuess(previousComputerGuessesValues: string[]): 
   } while (previousComputerGuessesValues.includes(guess) && attempts < MAX_ATTEMPTS);
   
   if (attempts >= MAX_ATTEMPTS) {
-    return generateSecretCode();
+    return generateSecretCode(); // Fallback if it can't find a unique guess quickly
   }
   return guess;
 }
 
 export function calculatePlayerScore(guesses: Guess[]): number {
-  let score = 0;
+  if (!guesses || guesses.length === 0) {
+    return 0;
+  }
+  let maxCorrectDigitsInSingleGuess = 0;
   guesses.forEach(guess => {
-    guess.feedback.forEach(fb => {
-      if (fb === 'correct') {
-        score++;
-      }
-    });
+    const correctDigitsInThisGuess = guess.feedback.filter(fb => fb === 'correct').length;
+    if (correctDigitsInThisGuess > maxCorrectDigitsInSingleGuess) {
+      maxCorrectDigitsInSingleGuess = correctDigitsInThisGuess;
+    }
   });
-  return score;
+  return maxCorrectDigitsInSingleGuess;
 }
