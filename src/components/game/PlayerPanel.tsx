@@ -18,7 +18,7 @@ interface PlayerPanelProps {
   guesses: Guess[];
   onMakeGuess: (guess: string) => void;
   isSubmitting: boolean;
-  secretForDisplay?: string[]; // Only for debugging or "show secret" feature
+  secretForDisplay?: string[];
 }
 
 const MAX_DIGITS = 4;
@@ -58,8 +58,11 @@ export default function PlayerPanel({
           <UserCircle2 className={`mr-2 h-6 w-6 sm:h-7 sm:h-7 ${isCurrentPlayer ? 'text-primary' : ''}`} />
           {playerName} {isCurrentPlayer && "(You)"}
         </CardTitle>
-        {secretForDisplay && (
-            <CardDescription className="text-xs font-mono">Secret: {secretForDisplay.join('')}</CardDescription>
+        {/* Display Secret Code based on player type */}
+        {secretForDisplay && secretForDisplay.length === MAX_DIGITS && (
+          <CardDescription className="text-xs font-mono pt-1">
+            Secret Code: {isCurrentPlayer ? secretForDisplay.join('') : '****'}
+          </CardDescription>
         )}
       </CardHeader>
       <CardContent className="space-y-4">

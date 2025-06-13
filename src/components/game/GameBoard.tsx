@@ -78,7 +78,7 @@ export default function GameBoard() {
           guesses={playerGuesses}
           onMakeGuess={makePlayerGuess}
           isSubmitting={isSubmitting}
-          // secretForDisplay={playerSecret} // Optional: for debugging
+          secretForDisplay={playerSecret}
         />
         <PlayerPanel
           playerName={opponentPanelName}
@@ -87,7 +87,7 @@ export default function GameBoard() {
           guesses={opponentGuesses}
           onMakeGuess={() => {}} // Opponent guesses are simulated or come from backend
           isSubmitting={isSubmitting}
-          // secretForDisplay={opponentSecret} // Optional: for debugging
+          secretForDisplay={opponentSecret}
         />
       </div>
       {isSubmitting && currentTurn === 'opponent' && (
