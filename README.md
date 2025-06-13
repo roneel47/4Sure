@@ -1,6 +1,6 @@
-# NumberLock Duel
+# 4Sure
 
-NumberLock Duel is a two-player (Player vs. Computer) turn-based number guessing game. Each player sets a secret 4-digit code, and then players take turns guessing their opponent's code. The first player to guess the opponent's code wins!
+4Sure is a two-player (Player vs. Computer) turn-based number guessing game. Each player sets a secret 4-digit code, and then players take turns guessing their opponent's code. The first player to guess the opponent's code wins!
 
 This project is built with Next.js, React, ShadCN UI components, and Tailwind CSS.
 
