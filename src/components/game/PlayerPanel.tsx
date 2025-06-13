@@ -69,8 +69,8 @@ export default function PlayerPanel({
             {guesses.length === 0 && (
               <p className="text-muted-foreground text-center py-8">No guesses made yet.</p>
             )}
-            {guesses.slice().reverse().map((guess, index) => (
-              <GuessDisplay key={guesses.length - 1 - index} guess={guess} isPlayerGuess={isCurrentPlayer} />
+            {guesses.slice(-5).reverse().map((guess, index) => ( // Show last 5 guesses
+              <GuessDisplay key={`${guess.value}-${guesses.length - 1 - index}`} guess={guess} isPlayerGuess={isCurrentPlayer} />
             ))}
           </ScrollArea>
         </div>
@@ -93,3 +93,4 @@ export default function PlayerPanel({
     </Card>
   );
 }
+
