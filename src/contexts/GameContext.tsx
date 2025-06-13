@@ -4,7 +4,7 @@ import type React from 'react';
 import { createContext, useContext, useState, useCallback, useEffect }
 from 'react';
 import useLocalStorage from '@/hooks/useLocalStorage';
-import type { Guess, GameStatus } from '@/types/game';
+import type { Guess, GameStatus } from '@/types/game'; // Ensure GameStatus is imported if not already
 import { useAuth } from './AuthContext';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -36,9 +36,13 @@ interface GameContextType {
   exitGame: () => void;
   isSubmitting: boolean;
   isInitialLoading: boolean;
+  timeLeft: number;
+  isTimerActive: boolean;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
+
+const INITIAL_TIME_LIMIT = 20;
 
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { username, logout: authLogout } = useAuth();
@@ -64,6 +68,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(INITIAL_TIME_LIMIT);
+  const [isTimerActive, setIsTimerActive] = useState(false);
+
 
   const setPlayerSecret = (secret: string[]) => {
     setPlayerSecretState(secret);
@@ -86,9 +93,48 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       gameStatus: "SETUP_PLAYER",
       winner: null,
     });
-    setIsInitialLoading(false); // Reset initial loading state
-    setIsSubmitting(false); // Reset submitting state
+    setIsInitialLoading(false); 
+    setIsSubmitting(false); 
+    setTimeLeft(INITIAL_TIME_LIMIT);
+    setIsTimerActive(false);
   }, [setPlayerSecretState, setOpponentSecretState, setGameState]);
+
+  // Effect to control timer start/stop/reset based on game state and turn
+  useEffect(() => {
+    if (gameState.gameStatus === 'PLAYING' && !gameState.winner) {
+      setTimeLeft(INITIAL_TIME_LIMIT); // Reset to 20 seconds
+      setIsTimerActive(true);       // Activate timer
+    } else {
+      setIsTimerActive(false);      // Deactivate if game not playing or winner exists
+    }
+  }, [gameState.currentTurn, gameState.gameStatus, gameState.winner]);
+
+  // Effect for the countdown mechanism
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    if (isTimerActive && timeLeft > 0 && gameState.gameStatus === 'PLAYING' && !gameState.winner) {
+      intervalId = setInterval(() => {
+        setTimeLeft(prevTime => prevTime - 1);
+      }, 1000);
+    } else if (timeLeft === 0 && isTimerActive && gameState.gameStatus === 'PLAYING' && !gameState.winner) {
+      // Time's up!
+      setIsTimerActive(false); // Stop this timer instance
+      toast({
+        title: "Time's Up!",
+        description: `${gameState.currentTurn === 'player' ? (username || 'Player') : 'Computer'}'s turn was skipped.`,
+        variant: "destructive",
+      });
+
+      // Switch turn (this will trigger the above useEffect to reset and start timer for the next turn)
+      if (gameState.currentTurn === 'player') {
+        setGameState(prev => ({ ...prev, currentTurn: 'opponent' }));
+      } else { // Opponent's turn timed out
+        setGameState(prev => ({ ...prev, currentTurn: 'player' }));
+      }
+    }
+    return () => clearInterval(intervalId);
+  }, [isTimerActive, timeLeft, gameState.gameStatus, gameState.winner, gameState.currentTurn, username, setGameState, toast]);
+
 
   useEffect(() => {
     if (username && gameState.gameStatus === "SETUP_PLAYER" && !playerSecret.some(d => d !== '')) {
@@ -119,7 +165,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setIsInitialLoading(false); 
     setIsSubmitting(false); 
-  }, [setPlayerSecretState, setOpponentSecretState, setGameState, router, toast, setIsSubmitting, setIsInitialLoading]);
+  }, [setPlayerSecretState, setOpponentSecretState, setGameState, router, toast]);
 
   const simulateOpponentTurn = useCallback(async () => {
     if (gameState.gameStatus !== 'PLAYING' || gameState.currentTurn !== 'opponent' || gameState.winner || isSubmitting) {
@@ -177,6 +223,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsSubmitting(false); 
   }, [gameState, opponentSecret, setGameState, toast, isSubmitting]);
 
+  // This useEffect handles initiating the opponent's turn logic when it becomes their turn.
+  // The timer itself is managed by other effects (countdown and start/reset).
   useEffect(() => {
     if (
       gameState.gameStatus === 'PLAYING' &&
@@ -184,7 +232,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       !gameState.winner &&
       !isSubmitting 
     ) {
-      simulateOpponentTurn();
+      const thinkDelay = setTimeout(() => {
+        simulateOpponentTurn();
+      }, 750); 
+      return () => clearTimeout(thinkDelay);
     }
   }, [gameState.currentTurn, gameState.gameStatus, gameState.winner, isSubmitting, simulateOpponentTurn]);
 
@@ -209,7 +260,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       makePlayerGuess,
       exitGame,
       isSubmitting,
-      isInitialLoading
+      isInitialLoading,
+      timeLeft,
+      isTimerActive,
     }}>
       {children}
     </GameContext.Provider>
@@ -223,3 +276,5 @@ export const useGame = (): GameContextType => {
   }
   return context;
 };
+
+    

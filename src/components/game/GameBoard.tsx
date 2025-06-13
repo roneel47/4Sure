@@ -4,6 +4,7 @@ import { useGame } from '@/contexts/GameContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PlayerPanel from './PlayerPanel';
 import TurnIndicator from './TurnIndicator';
+import TimerDisplay from './TimerDisplay'; // Import TimerDisplay
 import { Button } from '../ui/button';
 import { useRouter } from 'next/navigation';
 import { Award, Hourglass, RotateCcw } from 'lucide-react';
@@ -21,7 +22,9 @@ export default function GameBoard() {
     makePlayerGuess,
     initializeGame, 
     isSubmitting,
-    isInitialLoading // New state for initial game load
+    isInitialLoading,
+    timeLeft,         // Get timeLeft
+    isTimerActive,    // Get isTimerActive
   } = useGame();
   const { username } = useAuth();
   const router = useRouter();
@@ -76,10 +79,16 @@ export default function GameBoard() {
 
   return (
     <div className="space-y-6">
-      <TurnIndicator 
-        currentPlayerName={currentTurn === 'player' ? playerPanelName : computerPanelName}
-        isPlayerTurn={currentTurn === 'player'} 
-      />
+      <div className="text-center py-3 mb-4 rounded-lg bg-card shadow-md flex flex-col items-center">
+        <TurnIndicator 
+          currentPlayerName={currentTurn === 'player' ? playerPanelName : computerPanelName}
+          isPlayerTurn={currentTurn === 'player'} 
+        />
+        {/* Conditionally render TimerDisplay */}
+        {gameStatus === "PLAYING" && !winner && (
+          <TimerDisplay timeLeft={timeLeft} isTimerActive={isTimerActive} />
+        )}
+      </div>
       <div className="flex flex-col md:flex-row gap-4 sm:gap-6">
         <PlayerPanel
           playerName={playerPanelName}
@@ -87,7 +96,7 @@ export default function GameBoard() {
           isPlayerTurn={currentTurn === 'player'}
           guesses={playerGuesses}
           onMakeGuess={makePlayerGuess}
-          isSubmitting={isSubmitting && currentTurn === 'player'} // Only player's submission matters for this panel's button
+          isSubmitting={isSubmitting && currentTurn === 'player'}
           secretForDisplay={playerSecret}
         />
         <PlayerPanel
@@ -96,7 +105,7 @@ export default function GameBoard() {
           isPlayerTurn={currentTurn === 'opponent'} 
           guesses={opponentGuesses}
           onMakeGuess={() => {}} 
-          isSubmitting={false} // Computer panel doesn't have active submission controls
+          isSubmitting={false} 
           secretForDisplay={opponentSecret} 
         />
       </div>
@@ -111,3 +120,5 @@ export default function GameBoard() {
     </div>
   );
 }
+
+    
