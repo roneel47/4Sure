@@ -12,26 +12,36 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 export default function GameBoard() {
   const { 
     playerSecret, 
-    opponentSecret, // For display/debug in local sim
+    opponentSecret,
     playerGuesses, 
     opponentGuesses, 
     currentTurn, 
     gameStatus, 
     winner,
     makePlayerGuess,
-    initializeGame, // To restart game
-    isSubmitting
+    initializeGame, 
+    isSubmitting,
+    isInitialLoading // New state for initial game load
   } = useGame();
   const { username } = useAuth();
   const router = useRouter();
 
   const handleRestartGame = () => {
     initializeGame();
-    router.push('/setup'); // Go back to setup for new secrets
+    router.push('/setup'); 
   };
 
+  if (isInitialLoading && gameStatus === "PLAYING") {
+    return (
+      <div className="fixed inset-0 bg-background/90 flex flex-col items-center justify-center z-50 p-4">
+        <Hourglass className="mx-auto h-16 w-16 text-primary animate-spin" />
+        <p className="mt-4 text-xl text-center">Starting your game...</p>
+        <p className="mt-2 text-sm text-muted-foreground text-center">The computer is choosing its secret code.</p>
+      </div>
+    );
+  }
+
   if (gameStatus === "SETUP_PLAYER" || gameStatus === "WAITING_OPPONENT_SECRET") {
-    // This state should be handled by /setup page, redirect if accessed directly
     if (typeof window !== 'undefined') router.replace("/setup");
     return <div className="flex-grow flex items-center justify-center"><p>Loading game setup...</p></div>;
   }
@@ -77,17 +87,17 @@ export default function GameBoard() {
           isPlayerTurn={currentTurn === 'player'}
           guesses={playerGuesses}
           onMakeGuess={makePlayerGuess}
-          isSubmitting={isSubmitting}
+          isSubmitting={isSubmitting && currentTurn === 'player'} // Only player's submission matters for this panel's button
           secretForDisplay={playerSecret}
         />
         <PlayerPanel
           playerName={computerPanelName}
-          isCurrentPlayer={false} // This panel is always for the computer from current user's view
-          isPlayerTurn={currentTurn === 'opponent'} // 'opponent' still used internally for turn logic
+          isCurrentPlayer={false} 
+          isPlayerTurn={currentTurn === 'opponent'} 
           guesses={opponentGuesses}
-          onMakeGuess={() => {}} // Computer guesses are simulated
-          isSubmitting={isSubmitting}
-          secretForDisplay={opponentSecret} // Will show as '****' due to PlayerPanel logic
+          onMakeGuess={() => {}} 
+          isSubmitting={false} // Computer panel doesn't have active submission controls
+          secretForDisplay={opponentSecret} 
         />
       </div>
       {isSubmitting && currentTurn === 'opponent' && (
