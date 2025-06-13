@@ -7,7 +7,7 @@ import useLocalStorage from '@/hooks/useLocalStorage';
 
 interface AuthContextType {
   username: string | null;
-  login: () => void;
+  login: (customUsername?: string) => void;
   logout: () => void;
   isLoggedIn: boolean;
 }
@@ -23,13 +23,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoggedIn(!!username);
   }, [username]);
 
-  const login = useCallback(() => {
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const newUsername = `Player_${randomSuffix}`;
-    setUsername(newUsername);
+  const login = useCallback((customUsername?: string) => {
+    let finalUsername = customUsername?.trim();
+    if (!finalUsername) {
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      finalUsername = `Player_${randomSuffix}`;
+    }
+    setUsername(finalUsername);
     setIsLoggedIn(true);
-    // router.push('/setup'); // Navigation handled by component after login
-  }, [setUsername, router]);
+    // Navigation handled by component after login
+  }, [setUsername]);
 
   const logout = useCallback(() => {
     setUsername(null);

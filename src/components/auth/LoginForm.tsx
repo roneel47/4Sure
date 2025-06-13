@@ -1,17 +1,27 @@
 
 "use client";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { Play } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
 
 export default function LoginForm() {
   const { login, isLoggedIn } = useAuth();
   const router = useRouter();
+  const [inputUsername, setInputUsername] = useState("");
+
+  const handleGenerateRandomName = () => {
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const newUsername = `Player_${randomSuffix}`;
+    setInputUsername(newUsername);
+  };
 
   const handleLogin = () => {
-    login();
+    login(inputUsername.trim() || undefined); // Pass trimmed username or undefined to generate random
     router.push("/setup");
   };
 
@@ -31,8 +41,30 @@ export default function LoginForm() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-6">
-        <p className="text-center">
-          Click below to start. A random username will be generated for you.
+        <div className="w-full space-y-2">
+          <Label htmlFor="username-input">Choose Your Name</Label>
+          <div className="flex items-center space-x-2">
+            <Input
+              id="username-input"
+              placeholder="Enter name or leave blank for random"
+              value={inputUsername}
+              onChange={(e) => setInputUsername(e.target.value)}
+              className="flex-grow"
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleGenerateRandomName}
+              aria-label="Generate random name"
+              title="Generate random name"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <p className="text-center text-sm text-muted-foreground">
+          Enter your name, or use the refresh button for a random one.
+          If left blank, a random name will be assigned.
         </p>
         <Button onClick={handleLogin} className="w-full" size="lg">
           <Play className="mr-2 h-5 w-5" /> Login to Play
