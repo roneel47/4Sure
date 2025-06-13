@@ -12,7 +12,7 @@ export default function Header() {
     <header className="py-4 px-4 sm:px-6 md:px-8 border-b border-border/50">
       <div className="container mx-auto flex justify-between items-center">
         <Link href="/" className="text-2xl font-headline text-primary hover:opacity-80 transition-opacity">
-          NumberLock Duel
+          4Sure
         </Link>
         {(gameStatus !== "SETUP_PLAYER" && gameStatus !== "WAITING_OPPONENT_SECRET") && (
           <Button variant="destructive" onClick={exitGame} size="sm">

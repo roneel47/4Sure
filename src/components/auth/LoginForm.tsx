@@ -25,7 +25,7 @@ export default function LoginForm() {
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="text-center">
-        <CardTitle className="text-3xl text-primary">NumberLock Duel</CardTitle>
+        <CardTitle className="text-3xl text-primary">4Sure</CardTitle>
         <CardDescription className="text-muted-foreground pt-2">
           Guess the secret 4-digit number before your opponent does!
         </CardDescription>

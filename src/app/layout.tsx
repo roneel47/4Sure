@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AppProviders } from '@/contexts/AppProviders';
 
 export const metadata: Metadata = {
-  title: 'NumberLock Duel',
+  title: '4Sure',
   description: 'A two-player turn-based number guessing game.',
 };
 
