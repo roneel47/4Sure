@@ -145,7 +145,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500));
 
-    const opponentGuessArray = generateComputerGuess();
+    const previousOpponentGuessValues = gameState.opponentGuesses.map(g => g.value);
+    const opponentGuessArray = generateComputerGuess(previousOpponentGuessValues);
     const opponentGuessStr = opponentGuessArray.join('');
     const feedback = calculateFeedback(opponentGuessArray, playerSecret);
     const newOpponentGuess: Guess = { value: opponentGuessStr, feedback };
@@ -186,10 +187,18 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsSubmitting(false); 
     } else {
       setGameState(prev => ({ ...prev, playerGuesses: updatedPlayerGuesses, currentTurn: 'opponent' }));
+      // Removed setIsSubmitting(false) here; it should be set after simulateOpponentTurn completes or player wins.
+      // The simulateOpponentTurn function will handle its own setIsSubmitting.
+      // However, the overall "submitting" state for the player's action can be considered done.
+      // Let's ensure isSubmitting is false before potentially starting opponent's turn if that's desired.
+      // setIsSubmitting(false); // Moved to after simulateOpponentTurn call is scheduled.
+
+      // Schedule opponent's turn. The isSubmitting state related to player's guess is now complete.
+      // The isSubmitting state for the opponent's turn will be managed by simulateOpponentTurn.
+      setIsSubmitting(false); // Player's submission action is complete.
       setTimeout(() => {
-        simulateOpponentTurn();
+        simulateOpponentTurn(); // This function will set its own isSubmitting for computer's turn.
       }, 1500); 
-      setIsSubmitting(false); 
     }
   }, [gameState, opponentSecret, setGameState, toast, isSubmitting, simulateOpponentTurn]);
 
@@ -227,3 +236,4 @@ export const useGame = (): GameContextType => {
   }
   return context;
 };
+

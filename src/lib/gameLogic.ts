@@ -33,9 +33,35 @@ export function checkWin(feedback: boolean[]): boolean {
 }
 
 /**
- * Generates a random guess for the computer.
+ * Generates a random guess for the computer, avoiding guesses from an exclude list.
+ * @param {string[]} [excludeList=[]] - An optional list of guess strings to avoid.
  * @returns {string[]} An array of strings, each a digit, representing the computer's guess.
  */
-export function generateComputerGuess(): string[] {
-  return Array(CODE_LENGTH).fill('').map(() => String(Math.floor(Math.random() * 10)));
+export function generateComputerGuess(excludeList: string[] = []): string[] {
+  let guessString = "";
+  let guessArray: string[] = [];
+  let attempts = 0;
+  // There are 10^CODE_LENGTH possible unique codes (e.g., 10,000 for CODE_LENGTH = 4).
+  // MAX_ATTEMPTS can be set to this value or slightly higher as a practical limit.
+  const MAX_POSSIBLE_UNIQUE_CODES = Math.pow(10, CODE_LENGTH);
+  const MAX_ATTEMPTS = MAX_POSSIBLE_UNIQUE_CODES + 100; // A little buffer
+
+  if (excludeList.length >= MAX_POSSIBLE_UNIQUE_CODES) {
+    console.warn("All possible codes have been excluded. Returning a random (possibly repeated) guess.");
+    // Fallback to a completely random guess if all options are exhausted.
+    return Array(CODE_LENGTH).fill('').map(() => String(Math.floor(Math.random() * 10)));
+  }
+
+  do {
+    guessArray = Array(CODE_LENGTH).fill('').map(() => String(Math.floor(Math.random() * 10)));
+    guessString = guessArray.join('');
+    attempts++;
+    if (attempts > MAX_ATTEMPTS) {
+      console.warn("Max attempts reached in generateComputerGuess. Returning a potentially repeated guess.");
+      break; // Exit loop and return the last generated guess
+    }
+  } while (excludeList.includes(guessString));
+  
+  return guessArray;
 }
+
