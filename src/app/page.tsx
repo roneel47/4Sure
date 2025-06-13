@@ -35,7 +35,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex-grow flex flex-col items-center justify-center p-4 bg-gradient-to-br from-background to-zinc-800">
+    <main className="flex-grow flex flex-col items-center justify-center p-4 bg-background">
        <div className="absolute inset-0 overflow-hidden z-0">
         <Image 
           src="https://placehold.co/1200x800.png" 
