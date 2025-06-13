@@ -11,7 +11,7 @@ interface GuessDisplayProps {
 export default function GuessDisplay({ guess, isPlayerGuess = false }: GuessDisplayProps) {
   return (
     <div className={`flex items-center space-x-1.5 p-2 rounded-md mb-2 ${isPlayerGuess ? 'bg-secondary/30' : 'bg-muted/30'}`}>
-      {guess.value.split('').map((digit, index) => (
+      {guess.value.split('').map((_, index) => ( // Changed 'digit' to '_' as we don't always use it
         <div
           key={index}
           className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-xl sm:text-2xl font-bold rounded-md border-2 transition-all duration-300
@@ -21,13 +21,10 @@ export default function GuessDisplay({ guess, isPlayerGuess = false }: GuessDisp
             }
           `}
         >
-          {guess.feedback[index] ? <Lock className="w-5 h-5 sm:w-6 sm:h-6" /> : digit}
+          {guess.feedback[index] ? <Lock className="w-5 h-5 sm:w-6 sm:h-6" /> : ''}
         </div>
       ))}
-      <div className="ml-auto pl-2 flex flex-col items-end">
-        <span className="text-xs text-muted-foreground">Guess:</span>
-        <span className="text-sm font-mono">{guess.value}</span>
-      </div>
+      {/* The following div that showed the full guess.value has been removed */}
     </div>
   );
 }
