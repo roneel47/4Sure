@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Play, RefreshCw } from "lucide-react";
+import Image from "next/image";
 
 export default function LoginForm() {
   const { login, isLoggedIn } = useAuth();
@@ -35,7 +36,9 @@ export default function LoginForm() {
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="text-center">
-        <CardTitle className="text-3xl text-primary">4Sure</CardTitle>
+        <div className="flex justify-center mb-2">
+          <Image src="/logo.svg" alt="4Sure Logo" width={180} height={54} priority />
+        </div>
         <CardDescription className="text-muted-foreground pt-2">
           Guess the secret 4-digit number before your opponent does!
         </CardDescription>
