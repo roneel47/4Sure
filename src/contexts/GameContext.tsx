@@ -8,6 +8,13 @@ import type { Guess } from '@/types/game';
 import { useAuth } from './AuthContext';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
+import { 
+  CODE_LENGTH, 
+  generateSecretCode, 
+  calculateFeedback, 
+  checkWin, 
+  generateComputerGuess 
+} from '@/lib/gameLogic';
 
 
 export type GameStatus = "SETUP_PLAYER" | "WAITING_OPPONENT_SECRET" | "PLAYING" | "GAME_OVER";
@@ -16,8 +23,8 @@ export type GameStatus = "SETUP_PLAYER" | "WAITING_OPPONENT_SECRET" | "PLAYING" 
 interface GameContextType {
   playerSecret: string[];
   setPlayerSecret: (secret: string[]) => void;
-  opponentSecret: string[]; // For local simulation
-  setOpponentSecret: (secret: string[]) => void; // For local simulation
+  opponentSecret: string[]; 
+  setOpponentSecret: (secret: string[]) => void; 
   
   playerGuesses: Guess[];
   opponentGuesses: Guess[];
@@ -28,21 +35,19 @@ interface GameContextType {
 
   initializeGame: () => void;
   submitPlayerSecret: (secret: string[]) => void;
-  makePlayerGuess: (guess: string) => void; // Changed guess type to string
+  makePlayerGuess: (guess: string) => void;
   exitGame: () => void;
   isSubmitting: boolean;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
-const MAX_DIGITS = 4;
-
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { username, logout: authLogout } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
-  const [playerSecret, setPlayerSecretState] = useLocalStorage<string[]>('numberlock-playerSecret', Array(MAX_DIGITS).fill(''));
+  const [playerSecret, setPlayerSecretState] = useLocalStorage<string[]>('numberlock-playerSecret', Array(CODE_LENGTH).fill(''));
   const [opponentSecret, setOpponentSecretState] = useLocalStorage<string[]>('numberlock-opponentSecret', []); 
   
   const [gameState, setGameState] = useLocalStorage<{
@@ -73,8 +78,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
   
   const initializeGame = useCallback(() => {
-    setPlayerSecretState(Array(MAX_DIGITS).fill(''));
-    setOpponentSecretState(Array(MAX_DIGITS).fill('')); 
+    setPlayerSecretState(Array(CODE_LENGTH).fill(''));
+    setOpponentSecretState(Array(CODE_LENGTH).fill('')); 
     setGameState({
       playerGuesses: [],
       opponentGuesses: [],
@@ -98,22 +103,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPlayerSecretState(secret);
     await new Promise(resolve => setTimeout(resolve, 500)); 
     
-    const autoOpponentSecret = Array(MAX_DIGITS).fill('').map(() => String(Math.floor(Math.random() * 10)));
+    const autoOpponentSecret = generateSecretCode();
     setOpponentSecretState(autoOpponentSecret);
 
     setGameState(prev => ({ ...prev, gameStatus: 'PLAYING', currentTurn: 'player' }));
     setIsSubmitting(false);
     router.push('/play');
-    toast({ title: "Secret set!", description: "Computer's secret also set (auto-generated for demo). Game starts!" });
+    toast({ title: "Secret set!", description: "Computer's secret also set. Game starts!" });
   }, [setPlayerSecretState, setOpponentSecretState, setGameState, router, toast]);
-
-  const calculateFeedback = (guess: string[], secretToMatch: string[]): boolean[] => {
-    if (!secretToMatch || secretToMatch.length !== MAX_DIGITS || secretToMatch.some(d => d === '' || d === undefined || d === null)) {
-        console.error("[GameContext] Invalid secretToMatch in calculateFeedback:", secretToMatch);
-        return Array(MAX_DIGITS).fill(false); 
-    }
-    return guess.map((digit, index) => digit === secretToMatch[index]);
-  };
 
   const simulateOpponentTurn = useCallback(async () => {
     console.log('[GameContext] Attempting simulateOpponentTurn. Current state:', {
@@ -135,21 +132,20 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('[GameContext] Opponent turn: Already submitting.');
       return;
     }
-    if (!playerSecret || playerSecret.length !== MAX_DIGITS || playerSecret.some(d => d === '' || d === undefined || d === null)) {
+    if (!playerSecret || playerSecret.length !== CODE_LENGTH || playerSecret.some(d => d === '' || d === undefined || d === null)) {
       console.error('[GameContext] Opponent turn: Player secret is not properly set!', playerSecret);
       setGameState(prev => ({ ...prev, currentTurn: 'player' })); 
       toast({ title: "Game Error", description: "Player secret not found for Computer's turn. Your turn again.", variant: "destructive" });
-      setIsSubmitting(false); // Ensure isSubmitting is reset
+      setIsSubmitting(false); 
       return;
     }
 
     setIsSubmitting(true);
     console.log('[GameContext] Opponent turn: setIsSubmitting(true)');
     
-    // Simulate thinking delay
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500));
 
-    const opponentGuessArray = Array(MAX_DIGITS).fill('').map(() => String(Math.floor(Math.random() * 10)));
+    const opponentGuessArray = generateComputerGuess();
     const opponentGuessStr = opponentGuessArray.join('');
     const feedback = calculateFeedback(opponentGuessArray, playerSecret);
     const newOpponentGuess: Guess = { value: opponentGuessStr, feedback };
@@ -159,7 +155,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log(`[GameContext] Opponent guessed: ${opponentGuessStr}, Feedback: ${feedback.join(',')}, Against Player Secret: ${playerSecret.join('')}`);
     toast({ title: "Computer guessed!", description: `Computer guessed ${opponentGuessStr}`});
 
-    if (feedback.every(f => f)) {
+    if (checkWin(feedback)) {
       console.log('[GameContext] Opponent wins.');
       setGameState(prev => ({ ...prev, opponentGuesses: updatedOpponentGuesses, gameStatus: 'GAME_OVER', winner: 'opponent' }));
       toast({ title: "Oh no!", description: "Computer guessed your number!" });
@@ -184,21 +180,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const updatedPlayerGuesses = [...gameState.playerGuesses, newPlayerGuess];
 
-    if (feedback.every(f => f)) {
+    if (checkWin(feedback)) {
       setGameState(prev => ({ ...prev, playerGuesses: updatedPlayerGuesses, gameStatus: 'GAME_OVER', winner: 'player' }));
       toast({ title: "Congratulations!", description: "You guessed the Computer's number!" });
       setIsSubmitting(false); 
     } else {
       setGameState(prev => ({ ...prev, playerGuesses: updatedPlayerGuesses, currentTurn: 'opponent' }));
-      // IMPORTANT: We must ensure simulateOpponentTurn is called after the state update for currentTurn has been processed.
-      // The current structure with setTimeout should pick up the new simulateOpponentTurn instance due to useCallback dependencies.
       setTimeout(() => {
         simulateOpponentTurn();
-      }, 1500); // Delay before computer "thinks"
-      // isSubmitting will be set to false by simulateOpponentTurn, or if player wins.
-      // However, for the player's action, it's better to set it false here if not winning.
-      // The simulateOpponentTurn will manage its own isSubmitting state.
-      setIsSubmitting(false); // Player's submission is done.
+      }, 1500); 
+      setIsSubmitting(false); 
     }
   }, [gameState, opponentSecret, setGameState, toast, isSubmitting, simulateOpponentTurn]);
 
@@ -236,4 +227,3 @@ export const useGame = (): GameContextType => {
   }
   return context;
 };
-

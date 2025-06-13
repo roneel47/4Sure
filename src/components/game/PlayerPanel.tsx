@@ -10,6 +10,7 @@ import GuessDisplay from './GuessDisplay';
 import { Send, UserCircle2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
+import { CODE_LENGTH } from '@/lib/gameLogic'; // Import CODE_LENGTH
 
 interface PlayerPanelProps {
   playerName: string;
@@ -21,8 +22,6 @@ interface PlayerPanelProps {
   secretForDisplay?: string[];
 }
 
-const MAX_DIGITS = 4;
-
 export default function PlayerPanel({
   playerName,
   isCurrentPlayer,
@@ -32,21 +31,21 @@ export default function PlayerPanel({
   isSubmitting,
   secretForDisplay,
 }: PlayerPanelProps) {
-  const [currentGuess, setCurrentGuess] = useState<string[]>(Array(MAX_DIGITS).fill(''));
+  const [currentGuess, setCurrentGuess] = useState<string[]>(Array(CODE_LENGTH).fill(''));
   const { toast } = useToast();
 
   const handleGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentGuess.some(digit => digit === '') || currentGuess.length !== MAX_DIGITS) {
+    if (currentGuess.some(digit => digit === '') || currentGuess.length !== CODE_LENGTH) {
       toast({
         title: "Invalid Guess",
-        description: `Please enter all ${MAX_DIGITS} digits for your guess.`,
+        description: `Please enter all ${CODE_LENGTH} digits for your guess.`,
         variant: "destructive",
       });
       return;
     }
     onMakeGuess(currentGuess.join(''));
-    setCurrentGuess(Array(MAX_DIGITS).fill('')); // Clear input after submission
+    setCurrentGuess(Array(CODE_LENGTH).fill('')); // Clear input after submission
   };
 
   const canMakeGuess = isCurrentPlayer && isPlayerTurn && !isSubmitting;
@@ -58,15 +57,14 @@ export default function PlayerPanel({
           <UserCircle2 className={`mr-2 h-6 w-6 sm:h-7 sm:h-7 ${isCurrentPlayer ? 'text-primary' : ''}`} />
           {playerName} {isCurrentPlayer && "(You)"}
         </CardTitle>
-        {/* Display Secret Code based on player type */}
-        {secretForDisplay && secretForDisplay.length === MAX_DIGITS && (
+        {secretForDisplay && secretForDisplay.length === CODE_LENGTH && (
           <CardDescription className="text-xs font-mono pt-1">
             Secret Code: {isCurrentPlayer ? secretForDisplay.join('') : '****'}
           </CardDescription>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="h-64"> {/* Fixed height for scroll area */}
+        <div className="h-64">
           <ScrollArea className="h-full pr-3">
             {guesses.length === 0 && (
               <p className="text-muted-foreground text-center py-8">No guesses made yet.</p>
@@ -80,7 +78,7 @@ export default function PlayerPanel({
         {isCurrentPlayer && (
           <form onSubmit={handleGuessSubmit} className="space-y-3 pt-4 border-t border-border/50">
             <DigitInput
-              count={MAX_DIGITS}
+              count={CODE_LENGTH}
               values={currentGuess}
               onChange={setCurrentGuess}
               disabled={!canMakeGuess}

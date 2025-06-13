@@ -7,20 +7,19 @@ import DigitInput from './DigitInput';
 import { useGame } from '@/contexts/GameContext';
 import { LockKeyhole } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-const MAX_DIGITS = 4;
+import { CODE_LENGTH } from '@/lib/gameLogic'; // Import CODE_LENGTH
 
 export default function SecretSetupForm() {
-  const [secretDigits, setSecretDigits] = useState<string[]>(Array(MAX_DIGITS).fill(''));
+  const [secretDigits, setSecretDigits] = useState<string[]>(Array(CODE_LENGTH).fill(''));
   const { submitPlayerSecret, isSubmitting } = useGame();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (secretDigits.some(digit => digit === '') || secretDigits.length !== MAX_DIGITS) {
+    if (secretDigits.some(digit => digit === '') || secretDigits.length !== CODE_LENGTH) {
       toast({
         title: "Invalid Secret",
-        description: `Please enter all ${MAX_DIGITS} digits for your secret number.`,
+        description: `Please enter all ${CODE_LENGTH} digits for your secret number.`,
         variant: "destructive",
       });
       return;
@@ -35,13 +34,13 @@ export default function SecretSetupForm() {
           <LockKeyhole className="mr-3 h-8 w-8" /> Set Your Secret Number
         </CardTitle>
         <CardDescription className="pt-2">
-          Enter a 4-digit number (0-9, repetition allowed). This will be your secret.
+          Enter a {CODE_LENGTH}-digit number (0-9, repetition allowed). This will be your secret.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           <DigitInput
-            count={MAX_DIGITS}
+            count={CODE_LENGTH}
             values={secretDigits}
             onChange={setSecretDigits}
             disabled={isSubmitting}
