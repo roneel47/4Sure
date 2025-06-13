@@ -116,46 +116,38 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('[GameContext] Attempting simulateOpponentTurn. Current state:', {
       gameStatus: gameState.gameStatus,
       currentTurn: gameState.currentTurn,
-      isSubmittingState: isSubmitting,
+      isSubmittingState: isSubmitting, // This is the global isSubmitting
       playerSecret: playerSecret.join('')
     });
-
-    if (gameState.gameStatus !== 'PLAYING') {
-      console.log('[GameContext] Opponent turn: Not PLAYING. Status:', gameState.gameStatus);
+  
+    if (gameState.gameStatus !== 'PLAYING' || gameState.currentTurn !== 'opponent' || gameState.winner) {
+      console.log('[GameContext] Opponent turn: Condition not met to run.', { status: gameState.gameStatus, turn: gameState.currentTurn, winner: gameState.winner });
       return;
     }
-    if (gameState.currentTurn !== 'opponent') {
-      console.log('[GameContext] Opponent turn: Not opponents turn. Turn:', gameState.currentTurn);
-      return;
-    }
-    if (isSubmitting) {
-      console.log('[GameContext] Opponent turn: Already submitting.');
-      return;
-    }
+  
     if (!playerSecret || playerSecret.length !== CODE_LENGTH || playerSecret.some(d => d === '' || d === undefined || d === null)) {
       console.error('[GameContext] Opponent turn: Player secret is not properly set!', playerSecret);
       setGameState(prev => ({ ...prev, currentTurn: 'player' })); 
       toast({ title: "Game Error", description: "Player secret not found for Computer's turn. Your turn again.", variant: "destructive" });
-      setIsSubmitting(false); 
       return;
     }
-
-    setIsSubmitting(true);
+  
+    setIsSubmitting(true); // Computer's turn processing starts
     console.log('[GameContext] Opponent turn: setIsSubmitting(true)');
     
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500));
-
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500)); // Thinking time
+  
     const previousOpponentGuessValues = gameState.opponentGuesses.map(g => g.value);
     const opponentGuessArray = generateComputerGuess(previousOpponentGuessValues);
     const opponentGuessStr = opponentGuessArray.join('');
     const feedback = calculateFeedback(opponentGuessArray, playerSecret);
     const newOpponentGuess: Guess = { value: opponentGuessStr, feedback };
-
+  
     const updatedOpponentGuesses = [...gameState.opponentGuesses, newOpponentGuess];
     
     console.log(`[GameContext] Opponent guessed: ${opponentGuessStr}, Feedback: ${feedback.join(',')}, Against Player Secret: ${playerSecret.join('')}`);
     toast({ title: "Computer guessed!", description: `Computer guessed ${opponentGuessStr}`});
-
+  
     if (checkWin(feedback)) {
       console.log('[GameContext] Opponent wins.');
       setGameState(prev => ({ ...prev, opponentGuesses: updatedOpponentGuesses, gameStatus: 'GAME_OVER', winner: 'opponent' }));
@@ -164,16 +156,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('[GameContext] Opponent turn ends, player\'s turn.');
       setGameState(prev => ({ ...prev, opponentGuesses: updatedOpponentGuesses, currentTurn: 'player' }));
     }
-    setIsSubmitting(false);
+    setIsSubmitting(false); // Computer's turn processing ends
     console.log('[GameContext] Opponent turn: setIsSubmitting(false)');
-  }, [gameState, playerSecret, setGameState, toast, isSubmitting]);
+  }, [gameState, playerSecret, setGameState, toast, isSubmitting]); // isSubmitting dependency is important here for the outer scope check
 
 
   const makePlayerGuess = useCallback(async (guessStr: string) => {
     if (gameState.gameStatus !== 'PLAYING' || gameState.currentTurn !== 'player' || isSubmitting) return;
     
     console.log('[GameContext] Player making guess:', guessStr);
-    setIsSubmitting(true);
+    setIsSubmitting(true); // Player's guess processing starts
 
     const guessArray = guessStr.split('');
     const feedback = calculateFeedback(guessArray, opponentSecret);
@@ -184,23 +176,28 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (checkWin(feedback)) {
       setGameState(prev => ({ ...prev, playerGuesses: updatedPlayerGuesses, gameStatus: 'GAME_OVER', winner: 'player' }));
       toast({ title: "Congratulations!", description: "You guessed the Computer's number!" });
-      setIsSubmitting(false); 
     } else {
       setGameState(prev => ({ ...prev, playerGuesses: updatedPlayerGuesses, currentTurn: 'opponent' }));
-      // Removed setIsSubmitting(false) here; it should be set after simulateOpponentTurn completes or player wins.
-      // The simulateOpponentTurn function will handle its own setIsSubmitting.
-      // However, the overall "submitting" state for the player's action can be considered done.
-      // Let's ensure isSubmitting is false before potentially starting opponent's turn if that's desired.
-      // setIsSubmitting(false); // Moved to after simulateOpponentTurn call is scheduled.
-
-      // Schedule opponent's turn. The isSubmitting state related to player's guess is now complete.
-      // The isSubmitting state for the opponent's turn will be managed by simulateOpponentTurn.
-      setIsSubmitting(false); // Player's submission action is complete.
-      setTimeout(() => {
-        simulateOpponentTurn(); // This function will set its own isSubmitting for computer's turn.
-      }, 1500); 
+      // Computer's turn will be triggered by the useEffect watching currentTurn
     }
-  }, [gameState, opponentSecret, setGameState, toast, isSubmitting, simulateOpponentTurn]);
+    setIsSubmitting(false); // Player's guess processing ends
+  }, [gameState, opponentSecret, setGameState, toast, isSubmitting]);
+
+  // useEffect to handle computer's turn
+  useEffect(() => {
+    if (
+      gameState.gameStatus === 'PLAYING' &&
+      gameState.currentTurn === 'opponent' &&
+      !gameState.winner &&
+      !isSubmitting // This checks the global isSubmitting state
+    ) {
+      console.log("[GameContext] useEffect detected it's opponent's turn.");
+      // simulateOpponentTurn will set its own isSubmitting.
+      // The !isSubmitting here prevents re-triggering if, for example, gameState changed
+      // but simulateOpponentTurn was already in progress from a previous trigger.
+      simulateOpponentTurn();
+    }
+  }, [gameState.currentTurn, gameState.gameStatus, gameState.winner, isSubmitting, simulateOpponentTurn]);
 
 
   const exitGame = useCallback(() => {
