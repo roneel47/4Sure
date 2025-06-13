@@ -7,7 +7,7 @@ import DigitInput from './DigitInput';
 import { useGame } from '@/contexts/GameContext';
 import { LockKeyhole } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { CODE_LENGTH } from '@/lib/gameLogic'; // Import CODE_LENGTH
+import { CODE_LENGTH, isValidDigitSequence } from '@/lib/gameLogic';
 
 export default function SecretSetupForm() {
   const [secretDigits, setSecretDigits] = useState<string[]>(Array(CODE_LENGTH).fill(''));
@@ -24,6 +24,14 @@ export default function SecretSetupForm() {
       });
       return;
     }
+    if (!isValidDigitSequence(secretDigits)) {
+      toast({
+        title: "Invalid Secret Pattern",
+        description: `Code cannot have 3 or 4 identical consecutive digits (e.g., no "0001" or "1111").`,
+        variant: "destructive",
+      });
+      return;
+    }
     await submitPlayerSecret(secretDigits);
   };
 
@@ -34,7 +42,7 @@ export default function SecretSetupForm() {
           <LockKeyhole className="mr-3 h-8 w-8" /> Set Your Secret Number
         </CardTitle>
         <CardDescription className="pt-2">
-          Enter a {CODE_LENGTH}-digit number (0-9, repetition allowed). This will be your secret.
+          Enter a {CODE_LENGTH}-digit number (0-9, repetition allowed, but no 3 or 4 identical in a row).
         </CardDescription>
       </CardHeader>
       <CardContent>

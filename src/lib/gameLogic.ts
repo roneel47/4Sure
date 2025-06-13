@@ -41,14 +41,11 @@ export function generateComputerGuess(excludeList: string[] = []): string[] {
   let guessString = "";
   let guessArray: string[] = [];
   let attempts = 0;
-  // There are 10^CODE_LENGTH possible unique codes (e.g., 10,000 for CODE_LENGTH = 4).
-  // MAX_ATTEMPTS can be set to this value or slightly higher as a practical limit.
   const MAX_POSSIBLE_UNIQUE_CODES = Math.pow(10, CODE_LENGTH);
-  const MAX_ATTEMPTS = MAX_POSSIBLE_UNIQUE_CODES + 100; // A little buffer
+  const MAX_ATTEMPTS = MAX_POSSIBLE_UNIQUE_CODES + 100; 
 
   if (excludeList.length >= MAX_POSSIBLE_UNIQUE_CODES) {
     console.warn("All possible codes have been excluded. Returning a random (possibly repeated) guess.");
-    // Fallback to a completely random guess if all options are exhausted.
     return Array(CODE_LENGTH).fill('').map(() => String(Math.floor(Math.random() * 10)));
   }
 
@@ -58,10 +55,37 @@ export function generateComputerGuess(excludeList: string[] = []): string[] {
     attempts++;
     if (attempts > MAX_ATTEMPTS) {
       console.warn("Max attempts reached in generateComputerGuess. Returning a potentially repeated guess.");
-      break; // Exit loop and return the last generated guess
+      break; 
     }
   } while (excludeList.includes(guessString));
   
   return guessArray;
 }
 
+/**
+ * Validates if a sequence of digits meets the game's rules
+ * (no 3 or 4 identical consecutive digits for CODE_LENGTH = 4).
+ * @param {string[]} digits - The array of digit strings to validate.
+ * @returns {boolean} True if the sequence is valid, false otherwise.
+ */
+export function isValidDigitSequence(digits: string[]): boolean {
+  if (digits.length !== CODE_LENGTH) {
+    return true; // This function only cares about the pattern, length checked elsewhere
+  }
+
+  // Check for 4 identical digits (e.g., "0000")
+  if (digits[0] === digits[1] && digits[1] === digits[2] && digits[2] === digits[3]) {
+    return false;
+  }
+
+  // Check for 3 consecutive identical digits
+  // For CODE_LENGTH = 4, this covers "XXXY" and "YXXX"
+  if (
+    (digits[0] === digits[1] && digits[1] === digits[2]) || // First three are the same
+    (digits[1] === digits[2] && digits[2] === digits[3])    // Last three are the same
+  ) {
+    return false;
+  }
+
+  return true;
+}

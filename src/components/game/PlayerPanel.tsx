@@ -10,7 +10,7 @@ import GuessDisplay from './GuessDisplay';
 import { Send, UserCircle2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { CODE_LENGTH } from '@/lib/gameLogic'; // Import CODE_LENGTH
+import { CODE_LENGTH, isValidDigitSequence } from '@/lib/gameLogic'; 
 
 interface PlayerPanelProps {
   playerName: string;
@@ -44,8 +44,16 @@ export default function PlayerPanel({
       });
       return;
     }
+    if (!isValidDigitSequence(currentGuess)) {
+      toast({
+        title: "Invalid Guess Pattern",
+        description: `Guess cannot have 3 or 4 identical consecutive digits (e.g., no "0001" or "1111").`,
+        variant: "destructive",
+      });
+      return;
+    }
     onMakeGuess(currentGuess.join(''));
-    setCurrentGuess(Array(CODE_LENGTH).fill('')); // Clear input after submission
+    setCurrentGuess(Array(CODE_LENGTH).fill('')); 
   };
 
   const canMakeGuess = isCurrentPlayer && isPlayerTurn && !isSubmitting;
@@ -69,8 +77,8 @@ export default function PlayerPanel({
             {guesses.length === 0 && (
               <p className="text-muted-foreground text-center py-8">No guesses made yet.</p>
             )}
-            {guesses.slice(-5).reverse().map((guess, index) => ( // Show last 5 guesses
-              <GuessDisplay key={`${guess.value}-${guesses.length - 1 - index}`} guess={guess} isPlayerGuess={isCurrentPlayer} />
+            {guesses.slice(-5).reverse().map((guess, index) => (
+              <GuessDisplay key={`${guess.value}-${guesses.length - 1 - index}-${playerName}`} guess={guess} isPlayerGuess={isCurrentPlayer} />
             ))}
           </ScrollArea>
         </div>
@@ -93,4 +101,3 @@ export default function PlayerPanel({
     </Card>
   );
 }
-
