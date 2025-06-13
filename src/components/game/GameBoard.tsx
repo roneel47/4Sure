@@ -42,12 +42,12 @@ export default function GameBoard() {
         <CardHeader>
           <Award className="mx-auto h-16 w-16 text-primary" />
           <CardTitle className="text-3xl mt-4">
-            {winner === 'player' ? "You Win!" : "Opponent Wins!"}
+            {winner === 'player' ? "You Win!" : "Computer Wins!"}
           </CardTitle>
           <CardDescription className="pt-2">
             {winner === 'player' 
               ? `Congratulations, ${username}! You guessed the number!` 
-              : `Better luck next time, ${username}! The opponent guessed the number.`}
+              : `Better luck next time, ${username}! The Computer guessed the number.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -62,12 +62,12 @@ export default function GameBoard() {
   }
 
   const playerPanelName = username || "Player";
-  const opponentPanelName = "Opponent"; // In real app, this would be opponent's username
+  const computerPanelName = "Computer";
 
   return (
     <div className="space-y-6">
       <TurnIndicator 
-        currentPlayerName={currentTurn === 'player' ? playerPanelName : opponentPanelName}
+        currentPlayerName={currentTurn === 'player' ? playerPanelName : computerPanelName}
         isPlayerTurn={currentTurn === 'player'} 
       />
       <div className="flex flex-col md:flex-row gap-4 sm:gap-6">
@@ -81,20 +81,20 @@ export default function GameBoard() {
           secretForDisplay={playerSecret}
         />
         <PlayerPanel
-          playerName={opponentPanelName}
-          isCurrentPlayer={false} // This panel is always for the opponent from current user's view
-          isPlayerTurn={currentTurn === 'opponent'}
+          playerName={computerPanelName}
+          isCurrentPlayer={false} // This panel is always for the computer from current user's view
+          isPlayerTurn={currentTurn === 'opponent'} // 'opponent' still used internally for turn logic
           guesses={opponentGuesses}
-          onMakeGuess={() => {}} // Opponent guesses are simulated or come from backend
+          onMakeGuess={() => {}} // Computer guesses are simulated
           isSubmitting={isSubmitting}
-          secretForDisplay={opponentSecret}
+          secretForDisplay={opponentSecret} // Will show as '****' due to PlayerPanel logic
         />
       </div>
       {isSubmitting && currentTurn === 'opponent' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="p-6 text-center">
             <Hourglass className="mx-auto h-12 w-12 text-primary animate-spin" />
-            <p className="mt-4 text-lg">Opponent is thinking...</p>
+            <p className="mt-4 text-lg">Computer is thinking...</p>
           </Card>
         </div>
       )}
