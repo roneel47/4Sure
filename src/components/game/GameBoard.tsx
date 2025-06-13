@@ -4,7 +4,7 @@ import { useGame } from '@/contexts/GameContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PlayerPanel from './PlayerPanel';
 import TurnIndicator from './TurnIndicator';
-import TimerDisplay from './TimerDisplay'; // Import TimerDisplay
+import TimerDisplay from './TimerDisplay';
 import { Button } from '../ui/button';
 import { useRouter } from 'next/navigation';
 import { Award, Hourglass, RotateCcw } from 'lucide-react';
@@ -23,8 +23,8 @@ export default function GameBoard() {
     initializeGame, 
     isSubmitting,
     isInitialLoading,
-    timeLeft,         // Get timeLeft
-    isTimerActive,    // Get isTimerActive
+    timeLeft,
+    isTimerActive,
   } = useGame();
   const { username } = useAuth();
   const router = useRouter();
@@ -79,12 +79,11 @@ export default function GameBoard() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center py-3 mb-4 rounded-lg bg-card shadow-md flex flex-col items-center">
+      <div className={`text-center py-3 mb-4 rounded-lg bg-card shadow-md flex flex-col items-center ${currentTurn === 'player' ? 'border-2 border-primary ring-2 ring-primary/50' : 'border border-border'}`}>
         <TurnIndicator 
           currentPlayerName={currentTurn === 'player' ? playerPanelName : computerPanelName}
           isPlayerTurn={currentTurn === 'player'} 
         />
-        {/* Conditionally render TimerDisplay */}
         {gameStatus === "PLAYING" && !winner && (
           <TimerDisplay timeLeft={timeLeft} isTimerActive={isTimerActive} />
         )}
@@ -120,5 +119,3 @@ export default function GameBoard() {
     </div>
   );
 }
-
-    
