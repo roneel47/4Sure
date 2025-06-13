@@ -4,7 +4,6 @@ import LoginForm from "@/components/auth/LoginForm";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import Image from 'next/image';
 
 export default function LoginPage() {
   const { isLoggedIn, isAuthLoading } = useAuth();
@@ -36,16 +35,6 @@ export default function LoginPage() {
 
   return (
     <main className="flex-grow flex flex-col items-center justify-center p-4 bg-background">
-       <div className="absolute inset-0 overflow-hidden z-0">
-        <Image 
-          src="https://placehold.co/1200x800.png" 
-          alt="Abstract background" 
-          layout="fill" 
-          objectFit="cover" 
-          className="opacity-20"
-          data-ai-hint="abstract geometric"
-        />
-      </div>
       <div className="z-10">
         <LoginForm />
       </div>
