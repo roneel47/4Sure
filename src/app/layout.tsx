@@ -1,7 +1,9 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { AppProviders } from '@/contexts/AppProviders';
+import Footer from '@/components/layout/Footer'; // Import the Footer component
 
 export const metadata: Metadata = {
   title: '4Sure',
@@ -26,6 +28,7 @@ export default function RootLayout({
           {children}
           <Toaster />
         </AppProviders>
+        <Footer /> {/* Add the Footer component here */}
       </body>
     </html>
   );
