@@ -10,21 +10,30 @@ export default function GameLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isLoggedIn, username } = useAuth();
+  const { isLoggedIn, isAuthLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoggedIn) {
+    if (!isAuthLoading && !isLoggedIn) {
       router.replace("/");
     }
-  }, [isLoggedIn, router]);
+  }, [isLoggedIn, isAuthLoading, router]);
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex-grow flex flex-col items-center justify-center p-4">
+        <p>Loading session...</p>
+      </div>
+    ); 
+  }
 
   if (!isLoggedIn) {
+    // This state should be brief if redirection is working or user is truly logged out.
     return (
       <div className="flex-grow flex flex-col items-center justify-center p-4">
         <p>Redirecting to login...</p>
       </div>
-    ); // Or a loading spinner
+    );
   }
 
   return (

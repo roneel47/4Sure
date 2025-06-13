@@ -7,21 +7,31 @@ import { useEffect } from "react";
 import Image from 'next/image';
 
 export default function LoginPage() {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, isAuthLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoggedIn) {
+    if (!isAuthLoading && isLoggedIn) {
       router.replace("/setup");
     }
-  }, [isLoggedIn, router]);
+  }, [isLoggedIn, isAuthLoading, router]);
 
-  if (isLoggedIn) {
+  if (isAuthLoading) {
     return (
       <div className="flex-grow flex flex-col items-center justify-center p-4">
         <p>Loading...</p>
       </div>
-    ); // Or a loading spinner
+    );
+  }
+
+  if (isLoggedIn) {
+    // This state will be hit if user is logged in AFTER isAuthLoading is false,
+    // but before the useEffect redirects. Should be very brief.
+    return (
+      <div className="flex-grow flex flex-col items-center justify-center p-4">
+        <p>Loading...</p>
+      </div>
+    ); 
   }
 
   return (
