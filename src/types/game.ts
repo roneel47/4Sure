@@ -22,6 +22,7 @@ export type MultiplayerGameStatus =
 
 export interface PlayerData {
   socketId?: string;        // Optional: can be undefined if player disconnected
+  displayName?: string;     // User's chosen name
   secret?: string[];
   guessesMade?: Guess[];
   guessesAgainst?: Guess[];

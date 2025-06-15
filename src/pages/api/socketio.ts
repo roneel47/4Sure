@@ -54,9 +54,10 @@ async function getGameRoom(db: MongoDb, gameId: string): Promise<GameRoom | null
   }
 }
 
-async function createGameRoom(db: MongoDb, gameId: string, playerCount: number, hostSocketId: string): Promise<GameRoom | null> {
+async function createGameRoom(db: MongoDb, gameId: string, playerCount: number, hostSocketId: string, hostUsername?: string): Promise<GameRoom | null> {
     const initialPlayerData: PlayerData = {
         socketId: hostSocketId,
+        displayName: hostUsername || "player1",
         secret: [],
         guessesMade: [],
         guessesAgainst: [],
@@ -76,7 +77,7 @@ async function createGameRoom(db: MongoDb, gameId: string, playerCount: number, 
     try {
       const result = await db.collection<Omit<GameRoom, '_id'>>(COLLECTION_NAME).insertOne(roomToInsert);
       if (result.insertedId) {
-        console.log(`[SocketIO-DB] Game room ${gameId} created successfully by host ${hostSocketId}.`);
+        console.log(`[SocketIO-DB] Game room ${gameId} created successfully by host ${hostSocketId} (Name: ${hostUsername || "player1"}).`);
         return roomToInsert;
       }
       return null;
@@ -302,7 +303,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
 
                   if (winnerId && room.targetMap && Object.keys(room.targetMap).length > 0) {
                       if ((durationSinceGameStart > 7 && anyGuessesMadeInGame) || durationSinceGameStart > 15) {
-                          console.log(`[SocketIO] Game ${gameId}: Player ${playerId} disconnected during active game (${durationSinceGameStart.toFixed(1)}s in, guesses: ${anyGuessesMadeInGame}). ${winnerId} wins by default.`);
+                          console.log(`[SocketIO] Game ${gameId}: Player ${playerId} disconnected during active game (${durationSinceGameStart.toFixed(1)}s in, guesses: ${anyGuessesMadeInGame}). ${room.players[winnerId]?.displayName || winnerId} wins by default.`);
                           clearTurnTimer(gameId);
                           const finalRoomState = await updateGameRoom(db, gameId, {$set: {status: 'GAME_OVER', winner: winnerId, turn: undefined}});
                           if (finalRoomState) {
@@ -327,9 +328,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             }
           });
 
-          socket.on('join-game', async (data: { gameId: string; playerCount: string; isHost?: boolean; rejoiningPlayerId?: string }) => {
-              const { gameId, playerCount: playerCountString, isHost, rejoiningPlayerId } = data;
-              console.log(`[SocketIO] Socket ${socket.id} joining game: ${gameId}. isHost: ${isHost}, rejoiningAs: ${rejoiningPlayerId}`);
+          socket.on('join-game', async (data: { gameId: string; playerCount: string; isHost?: boolean; rejoiningPlayerId?: string; username?: string }) => {
+              const { gameId, playerCount: playerCountString, isHost, rejoiningPlayerId, username } = data;
+              console.log(`[SocketIO] Socket ${socket.id} joining game: ${gameId}. isHost: ${isHost}, rejoiningAs: ${rejoiningPlayerId}, username: ${username}`);
 
               const numPlayerCount = getPlayerCountNumber(playerCountString);
               if (!numPlayerCount) {
@@ -342,7 +343,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
               if (!room) {
                   if (isHost) {
                       console.log(`[SocketIO] Game ${gameId}: Creating room as host ${socket.id}.`);
-                      room = await createGameRoom(db, gameId, numPlayerCount, socket.id);
+                      room = await createGameRoom(db, gameId, numPlayerCount, socket.id, username);
                       if (!room) { socket.emit('error-event', { message: 'Failed to create room.' }); return; }
                       assignedPlayerId = "player1";
                   } else {
@@ -356,10 +357,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
                       }
                       console.log(`[SocketIO] Game ${gameId}: Player ${rejoiningPlayerId} (${socket.id}) rejoining.`);
                       assignedPlayerId = rejoiningPlayerId;
-                      if(!room.players[assignedPlayerId]) { // Should not happen if rejoiningPlayerId is valid
-                        room.players[assignedPlayerId] = { socketId: socket.id, hasSetSecret: false, isReady: false, guessesMade: [], guessesAgainst: [], secret: [] };
+                      if(!room.players[assignedPlayerId]) { 
+                        room.players[assignedPlayerId] = { 
+                            socketId: socket.id, 
+                            displayName: username || assignedPlayerId,
+                            hasSetSecret: false, 
+                            isReady: false, 
+                            guessesMade: [], 
+                            guessesAgainst: [], 
+                            secret: [] 
+                        };
+                      } else {
+                        room.players[assignedPlayerId]!.socketId = socket.id; 
+                        room.players[assignedPlayerId]!.displayName = username || room.players[assignedPlayerId]!.displayName || assignedPlayerId;
                       }
-                      room.players[assignedPlayerId]!.socketId = socket.id; 
                       
                   } else {
                       let foundSlot = false;
@@ -369,13 +380,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
                               assignedPlayerId = potentialPlayerId;
                               room.players[assignedPlayerId] = { 
                                   socketId: socket.id, 
+                                  displayName: username || assignedPlayerId,
                                   secret: room.players[assignedPlayerId]?.secret || [], 
                                   guessesMade: room.players[assignedPlayerId]?.guessesMade || [], 
                                   guessesAgainst: room.players[assignedPlayerId]?.guessesAgainst || [], 
                                   hasSetSecret: room.players[assignedPlayerId]?.hasSetSecret || false, 
                                   isReady: room.players[assignedPlayerId]?.isReady || false
                               };
-                              console.log(`[SocketIO] Game ${gameId}: New player ${assignedPlayerId} (${socket.id}) assigned.`);
+                              console.log(`[SocketIO] Game ${gameId}: New player ${assignedPlayerId} (${socket.id}, Name: ${username || assignedPlayerId}) assigned.`);
                               foundSlot = true;
                               break;
                           }
@@ -383,7 +395,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
                       if (!foundSlot) {
                           const activePlayerIds = Object.entries(room.players)
                               .filter(([pid, pdata]) => pdata.socketId)
-                              .map(([pid]) => pid);
+                              .map(([pid, pdata]) => pdata.displayName || pid);
                           socket.emit('error-event', { message: `Game room ${gameId} is full. Active players: ${activePlayerIds.join(', ')}` }); 
                           return;
                       }
@@ -421,7 +433,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
               
               io.to(gameId).emit('game-state-update', finalRoomState);
               if(finalRoomState.status === 'IN_PROGRESS' && finalRoomState.turn === assignedPlayerId && !finalRoomState.winner) {
-                console.log(`[SocketIO] Game ${gameId}: Player ${assignedPlayerId} rejoining, it's their turn. Starting timer.`);
+                console.log(`[SocketIO] Game ${gameId}: Player ${finalRoomState.players[assignedPlayerId]?.displayName || assignedPlayerId} rejoining, it's their turn. Starting timer.`);
                 startTurnTimer(gameId, assignedPlayerId, io);
               }
           });
@@ -524,7 +536,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             const startedRoom = await updateGameRoom(db, gameId, startGameUpdates);
 
             if (startedRoom) {
-                console.log(`[SocketIO] Game ${gameId} starting by host ${socket.playerId}. Turn: ${startingPlayer}, TargetMap: ${JSON.stringify(targetMap)}`);
+                console.log(`[SocketIO] Game ${gameId} starting by host ${startedRoom.players['player1']?.displayName || 'player1'}. Turn: ${startedRoom.players[startingPlayer]?.displayName || startingPlayer}, TargetMap: ${JSON.stringify(targetMap)}`);
                 io.to(gameId).emit('game-start', { gameId, startingPlayer, targetMap });
                 io.to(gameId).emit('game-state-update', startedRoom); 
                 if (startedRoom.status === 'IN_PROGRESS' && startedRoom.turn) {
@@ -579,7 +591,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             if (checkWin(feedback)) {
                 winner = socket.playerId;
                 updateOps.$set = { status: 'GAME_OVER' as MultiplayerGameStatus, winner: winner, turn: undefined };
-                console.log(`[SocketIO] Game ${gameId}: Player ${winner} has won!`);
+                console.log(`[SocketIO] Game ${gameId}: Player ${room.players[winner]?.displayName || winner} has won!`);
             } else {
                 updateOps.$set = { turn: targetPlayerId };
             }
@@ -601,10 +613,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             
             if (winner) {
                 io.to(gameId).emit('game-over', { gameId, winner });
-            } else if (updatedRoom.turn) { // Ensure turn is defined before starting timer
+            } else if (updatedRoom.turn) { 
                 const turnUpdateData: TurnUpdateData = { gameId, nextPlayerId: updatedRoom.turn, reason: 'guess' };
                 io.to(gameId).emit('turn-update', turnUpdateData);
-                if (updatedRoom.status === 'IN_PROGRESS') { // Redundant check, but safe
+                if (updatedRoom.status === 'IN_PROGRESS') { 
                      startTurnTimer(gameId, updatedRoom.turn, io);
                 }
             }
@@ -617,42 +629,57 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
                 socket.emit('error-event', {message: 'Player ID mismatch on exit.'});
                 return;
             }
-            console.log(`[SocketIO] Player ${playerId} exiting game ${gameId}`);
+            
             let room = await getGameRoom(db, gameId);
             if (!room || !room.players || !room.players[playerId]) {
                 console.warn(`[SocketIO] Player Exit: Room ${gameId} or player ${playerId} not found.`);
                 socket.emit('error-event', {message: 'Game or player not found on exit.'});
                 return;
             }
+             console.log(`[SocketIO] Player ${room.players[playerId]?.displayName || playerId} exiting game ${gameId}. Current status: ${room.status}`);
 
             clearTurnTimer(gameId); 
             
             const updateOps: any = { $set: { [`players.${playerId}.socketId`]: undefined }};
             let gameEndedByExit = false;
+            let gameStatusChangedToGameOver = false;
 
             if (room.status === 'IN_PROGRESS' && room.playerCount === 2) {
                 const otherPlayerId = Object.keys(room.players).find(pId => pId !== playerId && room.players[pId!]?.socketId);
                 if(otherPlayerId) {
-                    console.log(`[SocketIO] Game ${gameId}: Player ${playerId} exited an active 2-player game. ${otherPlayerId} wins by default.`);
+                    console.log(`[SocketIO] Game ${gameId}: Player ${room.players[playerId]?.displayName || playerId} exited an active 2-player game. ${room.players[otherPlayerId]?.displayName || otherPlayerId} wins by default.`);
                     updateOps.$set.status = 'GAME_OVER';
                     updateOps.$set.winner = otherPlayerId;
                     updateOps.$set.turn = undefined;
                     gameEndedByExit = true;
+                    gameStatusChangedToGameOver = true;
                 } else {
-                     console.log(`[SocketIO] Game ${gameId}: Player ${playerId} exited, but no other active player found. Game ending.`);
+                     console.log(`[SocketIO] Game ${gameId}: Player ${room.players[playerId]?.displayName || playerId} exited, but no other active player found. Game ending.`);
                      updateOps.$set.status = 'GAME_OVER';
                      updateOps.$set.winner = undefined; 
                      updateOps.$set.turn = undefined;
                      gameEndedByExit = true;
+                     gameStatusChangedToGameOver = true;
                 }
             } else if (room.status !== 'GAME_OVER' && room.status !== 'IN_PROGRESS') { 
+                 // Player exiting from lobby (WAITING_FOR_PLAYERS, WAITING_FOR_READY, READY_TO_START)
+                 console.log(`[SocketIO] Game ${gameId}: Player ${room.players[playerId]?.displayName || playerId} exiting from lobby. Setting room to GAME_OVER.`);
+                 updateOps.$set.status = 'GAME_OVER';
+                 updateOps.$set.winner = undefined; // No winner if exited from lobby
+                 updateOps.$set.turn = undefined;
+                 gameEndedByExit = true; // Exited, though not during active play
+                 gameStatusChangedToGameOver = true;
+            } else if (room.status === 'GAME_OVER') {
+                // Player exiting after game is already over, just mark disconnected
+                console.log(`[SocketIO] Game ${gameId}: Player ${room.players[playerId]?.displayName || playerId} exiting after game already over.`);
+            } else {
+                 // Player exiting a >2 player game or some other state
                  updateOps.$set[`players.${playerId}.isReady`] = false;
                  updateOps.$set[`players.${playerId}.hasSetSecret`] = false;
-                 // Determine new room status if not game over by exit
                  const activePlayersAfterExit = Object.values(room.players).filter(p => p.socketId && p.socketId !== socket.id);
-                 if (activePlayersAfterExit.length < room.playerCount) {
+                 if (activePlayersAfterExit.length < room.playerCount && room.status !== 'GAME_OVER') { // Don't change status if already game over
                     updateOps.$set.status = 'WAITING_FOR_PLAYERS';
-                 } else {
+                 } else if (room.status !== 'GAME_OVER') {
                     const allRemainingReady = activePlayersAfterExit.every(p => p.isReady);
                     updateOps.$set.status = allRemainingReady ? 'READY_TO_START' : 'WAITING_FOR_READY';
                  }
@@ -661,10 +688,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             const updatedRoom = await updateGameRoom(db, gameId, updateOps);
             if (updatedRoom) {
                 io.to(gameId).emit('game-state-update', updatedRoom);
-                if(gameEndedByExit && updatedRoom.winner) {
-                    io.to(gameId).emit('game-over', {gameId, winner: updatedRoom.winner});
-                } else if (gameEndedByExit && updatedRoom.status === 'GAME_OVER' && !updatedRoom.winner){
-                     io.to(gameId).emit('game-over', {gameId, winner: 'none'});
+                if(gameStatusChangedToGameOver && updatedRoom.status === 'GAME_OVER') { // Only emit game-over if status actually changed to GAME_OVER
+                    io.to(gameId).emit('game-over', {gameId, winner: updatedRoom.winner || 'none'}); // Ensure 'none' if no winner
                 }
             } else {
                 const currentRoomState = await getGameRoom(db, gameId);
@@ -686,3 +711,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
   }
   res.end();
 }
+

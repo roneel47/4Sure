@@ -8,16 +8,15 @@ import { io } from 'socket.io-client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import PlayerPanel from '@/components/game/PlayerPanel';
 import TurnIndicator from '@/components/game/TurnIndicator';
-import TimerDisplay from '@/components/game/TimerDisplay'; // Import TimerDisplay
+import TimerDisplay from '@/components/game/TimerDisplay';
 import { Button } from '@/components/ui/button';
 import type { Guess, PlayerData as ServerPlayerData, GameRoom as ServerGameRoom, TurnUpdateData } from '@/types/game'; 
 import { CODE_LENGTH } from '@/lib/gameLogic';
 import { Award, Hourglass, Loader2, LogOut } from 'lucide-react';
-
-const INITIAL_TIME_LIMIT_MULTIPLAYER = 30; // Must match server
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 
 interface ClientPlayerData extends Partial<ServerPlayerData> {
-  displayName: string; 
+  // displayName is already part of ServerPlayerData via PlayerData type
   guessesMade?: Guess[];
   guessesAgainst?: Guess[];
 }
@@ -28,7 +27,7 @@ interface MultiplayerGameState {
   currentTurnPlayerId: string | null;
   playersData: { [playerId: string]: ClientPlayerData }; 
   gameStatus: 'LOADING' | 'WAITING_FOR_GAME_START' | 'IN_PROGRESS' | 'GAME_OVER';
-  winner: string | null;
+  winner: string | null; // winner playerId
   targetMap: { [playerId: string]: string } | null; 
   timeLeft: number;
   isTimerActive: boolean;
@@ -38,6 +37,7 @@ export default function MultiplayerPlayPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { username } = useAuth(); // Get username
 
   const gameId = searchParams ? searchParams.get('gameId') : null;
   const playerCountParam = searchParams ? searchParams.get('playerCount') : "duo"; 
@@ -74,7 +74,7 @@ export default function MultiplayerPlayPage() {
         router.push(`/multiplayer-setup`); 
         return;
     }
-    console.log(`[MultiplayerPlay] Game ${gameId}: Found storedPlayerId: ${storedPlayerId}`);
+    console.log(`[MultiplayerPlay] Game ${gameId}: Found storedPlayerId: ${storedPlayerId}, Username: ${username}`);
     
     const mySecretFromStorage = localStorage.getItem(`mySecret_${gameId}_${storedPlayerId}`);
     if (!mySecretFromStorage) {
@@ -92,26 +92,31 @@ export default function MultiplayerPlayPage() {
     
     const newSocket = io({ path: '/api/socketio_c', addTrailingSlash: false, transports: ['websocket'] }); 
     setSocket(newSocket);
-    console.log(`[MultiplayerPlay] Game ${gameId}: Socket instance created ${newSocket.id}. Joining with storedPlayerId: ${storedPlayerId}`);
+    console.log(`[MultiplayerPlay] Game ${gameId}: Socket instance created ${newSocket.id}. Joining with storedPlayerId: ${storedPlayerId}, Username: ${username}`);
 
     newSocket.on('connect', () => {
         console.log(`[MultiplayerPlay] Game ${gameId}: Connected with socket ID ${newSocket.id}. Emitting 'join-game' for storedPlayerId: ${storedPlayerId}`);
-        newSocket.emit('join-game', { gameId, playerCount: playerCountParam || "duo", rejoiningPlayerId: storedPlayerId });
+        newSocket.emit('join-game', { 
+            gameId, 
+            playerCount: playerCountParam || "duo", 
+            rejoiningPlayerId: storedPlayerId,
+            username: username || undefined // Send username
+        });
     });
     
     newSocket.on('game-state-update', (serverRoomState: ServerGameRoom) => {
-         console.log(`[MultiplayerPlay] Game ${gameId}: Received 'game-state-update':`, JSON.stringify(serverRoomState));
+         console.log(`[MultiplayerPlay] Game ${gameId}: Received 'game-state-update':`, JSON.stringify(serverRoomState, null, 2));
          if (serverRoomState.gameId === gameId) {
             const newPlayersData: MultiplayerGameState['playersData'] = {};
             if (serverRoomState.players) {
                 Object.keys(serverRoomState.players).forEach(pid => {
                     const serverPlayer = serverRoomState.players[pid];
-                    if (serverPlayer.socketId || pid === storedPlayerId) { // Ensure current player's data is always included
+                    if (serverPlayer.socketId || pid === storedPlayerId) { 
                         newPlayersData[pid] = {
                             socketId: serverPlayer.socketId,
+                            displayName: serverPlayer.displayName || pid, // Use displayName from server
                             guessesMade: serverPlayer.guessesMade || [], 
                             guessesAgainst: serverPlayer.guessesAgainst || [],
-                            displayName: pid, // TODO: Get actual display name if stored
                             isReady: serverPlayer.isReady,
                             hasSetSecret: serverPlayer.hasSetSecret,
                         };
@@ -133,7 +138,6 @@ export default function MultiplayerPlayPage() {
                 gameStatus: currentStatus,
                 winner: serverRoomState.winner || null,
                 targetMap: serverRoomState.targetMap || null,
-                // Timer related state is updated based on 'turn-update' or if game is active
                 isTimerActive: currentStatus === 'IN_PROGRESS' && !!serverRoomState.turn && !serverRoomState.winner,
             }));
          }
@@ -147,7 +151,11 @@ export default function MultiplayerPlayPage() {
                 if (data.targetMap) {
                     Object.keys(data.targetMap).forEach(pid => {
                         if (!initialPlayersData[pid]) { 
-                            initialPlayersData[pid] = { displayName: pid, guessesMade: [], guessesAgainst: [] };
+                            initialPlayersData[pid] = { 
+                                displayName: prev.playersData[pid]?.displayName || pid, // Try to preserve existing displayName if any
+                                guessesMade: [], 
+                                guessesAgainst: [] 
+                            };
                         }
                     });
                 }
@@ -161,7 +169,8 @@ export default function MultiplayerPlayPage() {
                     isTimerActive: true,
                 };
             });
-            toast({title: "Game Started!", description: `${data.startingPlayer}'s turn.`});
+            const startingPlayerName = gameState.playersData[data.startingPlayer]?.displayName || data.startingPlayer;
+            toast({title: "Game Started!", description: `${startingPlayerName}'s turn.`});
         }
     });
 
@@ -188,11 +197,12 @@ export default function MultiplayerPlayPage() {
             setGameState(prev => ({ 
                 ...prev, 
                 currentTurnPlayerId: data.nextPlayerId,
-                timeLeft: INITIAL_TIME_LIMIT_MULTIPLAYER, // Reset timer
-                isTimerActive: prev.gameStatus === 'IN_PROGRESS' && !prev.winner, // Keep timer active if game is ongoing
+                timeLeft: INITIAL_TIME_LIMIT_MULTIPLAYER, 
+                isTimerActive: prev.gameStatus === 'IN_PROGRESS' && !prev.winner, 
             }));
             if (storedPlayerId && data.nextPlayerId) { 
-                 toast({description: `It's ${data.nextPlayerId === storedPlayerId ? 'Your' : (gameState.playersData[data.nextPlayerId]?.displayName || data.nextPlayerId) + "'s"} turn.${data.reason === 'timeout' ? ' (Opponent timed out)' : ''}`})
+                 const nextPlayerDisplayName = gameState.playersData[data.nextPlayerId]?.displayName || data.nextPlayerId;
+                 toast({description: `It's ${data.nextPlayerId === storedPlayerId ? 'Your' : nextPlayerDisplayName + "'s"} turn.${data.reason === 'timeout' ? ' (Opponent timed out)' : ''}`})
             }
         }
     });
@@ -201,8 +211,11 @@ export default function MultiplayerPlayPage() {
         if (data.gameId === gameId) {
             console.log(`[MultiplayerPlay] Game ${gameId}: Game Over event received`, data);
             setGameState(prev => ({ ...prev, gameStatus: 'GAME_OVER', winner: data.winner, isTimerActive: false }));
-            if (storedPlayerId && data.winner) { 
-                toast({title: "Game Over!", description: `${data.winner === storedPlayerId ? 'You are' : (gameState.playersData[data.winner]?.displayName || data.winner) + ' is'} the winner!`, duration: 5000});
+            if (storedPlayerId && data.winner && data.winner !== 'none') { 
+                const winnerDisplayName = gameState.playersData[data.winner]?.displayName || data.winner;
+                toast({title: "Game Over!", description: `${data.winner === storedPlayerId ? 'You are' : winnerDisplayName + ' is'} the winner!`, duration: 5000});
+            } else if (data.winner === 'none') {
+                toast({title: "Game Over", description: "The game has ended.", duration: 5000});
             }
         }
     });
@@ -231,9 +244,8 @@ export default function MultiplayerPlayPage() {
         newSocket.disconnect();
         setSocket(null);
     };
-  }, [gameId, router, toast, playerCountParam]); // Removed gameState.myPlayerId from deps
+  }, [gameId, router, toast, playerCountParam, username]); // Added username
 
-  // Client-side timer countdown effect
   useEffect(() => {
     let timerInterval: NodeJS.Timeout | undefined;
     if (gameState.isTimerActive && gameState.timeLeft > 0 && gameState.gameStatus === 'IN_PROGRESS' && !gameState.winner) {
@@ -241,8 +253,7 @@ export default function MultiplayerPlayPage() {
         setGameState(prev => ({ ...prev, timeLeft: Math.max(0, prev.timeLeft - 1) }));
       }, 1000);
     } else if (gameState.timeLeft === 0 && gameState.isTimerActive) {
-        // Client-side timer reached 0, server will handle the timeout and emit 'turn-update'
-        setGameState(prev => ({...prev, isTimerActive: false})); // Stop local countdown
+        setGameState(prev => ({...prev, isTimerActive: false})); 
     }
     return () => clearInterval(timerInterval);
   }, [gameState.isTimerActive, gameState.timeLeft, gameState.gameStatus, gameState.winner]);
@@ -295,6 +306,7 @@ export default function MultiplayerPlayPage() {
   
   const expectedPlayerCount = playerCountParam === "duo" ? 2 : (playerCountParam === "trio" ? 3 : (playerCountParam === "quads" ? 4 : 0));
   const activePlayersInRoom = Object.values(gameState.playersData).filter(p => p.socketId).length;
+  const myCurrentPlayerName = (gameState.myPlayerId && gameState.playersData[gameState.myPlayerId]?.displayName) || username || gameState.myPlayerId;
   
   if (gameState.gameStatus === 'WAITING_FOR_GAME_START' && 
       (!gameState.targetMap || activePlayersInRoom < expectedPlayerCount )) {
@@ -304,22 +316,26 @@ export default function MultiplayerPlayPage() {
         <Hourglass className="h-12 w-12 animate-spin text-primary" />
         <p className="mt-4 text-lg">Waiting for all players and game to start...</p>
         <p className="text-sm text-muted-foreground">Game ID: {gameId}</p>
-         <p className="text-xs">My ID: {gameState.myPlayerId}, Players in room: {activePlayersInRoom}/{expectedPlayerCount}</p>
+         <p className="text-xs">My Name: {myCurrentPlayerName}, Players in room: {activePlayersInRoom}/{expectedPlayerCount}</p>
       </div>
     );
   }
 
   if (gameState.gameStatus === 'GAME_OVER' && gameState.winner) {
+    const winnerDisplayName = (gameState.winner !== 'none' && gameState.playersData[gameState.winner]?.displayName) || gameState.winner;
+    const isMyWin = gameState.winner === gameState.myPlayerId;
     return (
       <Card className="w-full max-w-md mx-auto text-center shadow-xl mt-10">
         <CardHeader>
           <Award className="mx-auto h-16 w-16 text-primary" />
           <CardTitle className="text-3xl mt-4">
-            {gameState.winner === gameState.myPlayerId ? "You Win!" : `${gameState.playersData[gameState.winner]?.displayName || gameState.winner} Wins!`}
+            {gameState.winner === 'none' ? "Game Over" : (isMyWin ? "You Win!" : `${winnerDisplayName} Wins!`)}
           </CardTitle>
-          <CardDescription className="pt-2">
-            Congratulations to {gameState.playersData[gameState.winner]?.displayName || gameState.winner}!
-          </CardDescription>
+          {gameState.winner !== 'none' && (
+            <CardDescription className="pt-2">
+              Congratulations to {winnerDisplayName}!
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <Button onClick={handlePlayAgain} className="w-full" size="lg">Play Again</Button>
@@ -333,8 +349,9 @@ export default function MultiplayerPlayPage() {
   const myPlayerData = gameState.myPlayerId ? gameState.playersData[gameState.myPlayerId] : null;
   const opponentPlayerData = opponentId ? gameState.playersData[opponentId] : null;
 
-  if (gameState.gameStatus === 'IN_PROGRESS' && (!myPlayerData || !opponentPlayerData || !opponentId || !gameState.currentTurnPlayerId)) {
-     console.log(`[MultiplayerPlay] IN_PROGRESS but missing crucial data. myPlayerData: ${!!myPlayerData}, opponentPlayerData: ${!!opponentPlayerData}, opponentId: ${opponentId}, currentTurn: ${gameState.currentTurnPlayerId}`);
+  if (gameState.gameStatus === 'IN_PROGRESS' && (!myPlayerData || !opponentId || !gameState.currentTurnPlayerId)) {
+     // OpponentPlayerData might be missing if they disconnect, game might end soon by server.
+     console.log(`[MultiplayerPlay] IN_PROGRESS but missing some data. myPlayerData: ${!!myPlayerData}, opponentId: ${opponentId}, currentTurn: ${gameState.currentTurnPlayerId}`);
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -344,13 +361,14 @@ export default function MultiplayerPlayPage() {
     );
   }
 
+  const turnPlayerDisplayName = gameState.currentTurnPlayerId ? (gameState.playersData[gameState.currentTurnPlayerId]?.displayName || gameState.currentTurnPlayerId) : "Someone";
 
   return (
     <div className="space-y-6">
        <div className={`text-center py-3 mb-4 rounded-lg bg-card shadow-md flex flex-col items-center ${gameState.currentTurnPlayerId === gameState.myPlayerId ? 'border-2 border-primary ring-2 ring-primary/50' : 'border border-border'}`}>
-        {gameState.currentTurnPlayerId && gameState.playersData[gameState.currentTurnPlayerId] && (
+        {gameState.currentTurnPlayerId && (
             <TurnIndicator 
-              currentPlayerName={gameState.playersData[gameState.currentTurnPlayerId]?.displayName || gameState.currentTurnPlayerId} 
+              currentPlayerName={turnPlayerDisplayName} 
               isPlayerTurn={gameState.currentTurnPlayerId === gameState.myPlayerId} 
             />
         )}
@@ -360,9 +378,9 @@ export default function MultiplayerPlayPage() {
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 sm:gap-6">
-        {myPlayerData && (
+        {myPlayerData && gameState.myPlayerId && (
           <PlayerPanel
-            playerName={`${myPlayerData.displayName || gameState.myPlayerId} (You)`}
+            playerName={`${myPlayerData.displayName || username || gameState.myPlayerId} (You)`}
             isCurrentPlayer={true}
             isPlayerTurn={gameState.currentTurnPlayerId === gameState.myPlayerId}
             guesses={myPlayerData.guessesMade || []}
@@ -382,6 +400,12 @@ export default function MultiplayerPlayPage() {
             secretForDisplay={undefined} 
           />
         )}
+        {!opponentPlayerData && opponentId && gameState.gameStatus === 'IN_PROGRESS' && (
+             <Card className="flex-1 w-full shadow-lg border-border">
+                <CardHeader><CardTitle>{gameState.playersData[opponentId]?.displayName || opponentId} (Disconnected)</CardTitle></CardHeader>
+                <CardContent><p className="text-muted-foreground text-center py-8">Opponent has disconnected.</p></CardContent>
+             </Card>
+        )}
       </div>
        <Button onClick={handleExitGame} variant="outline" className="mt-6">
          <LogOut className="mr-2 h-4 w-4" /> Exit Game
@@ -389,3 +413,4 @@ export default function MultiplayerPlayPage() {
     </div>
   );
 }
+
