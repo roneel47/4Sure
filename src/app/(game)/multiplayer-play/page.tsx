@@ -13,10 +13,11 @@ import { Button } from '@/components/ui/button';
 import type { Guess, PlayerData as ServerPlayerData, GameRoom as ServerGameRoom, TurnUpdateData } from '@/types/game'; 
 import { CODE_LENGTH } from '@/lib/gameLogic';
 import { Award, Hourglass, Loader2, LogOut } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
+import { useAuth } from '@/contexts/AuthContext';
+
+const INITIAL_TIME_LIMIT_MULTIPLAYER = 30; // seconds
 
 interface ClientPlayerData extends Partial<ServerPlayerData> {
-  // displayName is already part of ServerPlayerData via PlayerData type
   guessesMade?: Guess[];
   guessesAgainst?: Guess[];
 }
@@ -37,7 +38,7 @@ export default function MultiplayerPlayPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { username } = useAuth(); // Get username
+  const { username } = useAuth(); 
 
   const gameId = searchParams ? searchParams.get('gameId') : null;
   const playerCountParam = searchParams ? searchParams.get('playerCount') : "duo"; 
@@ -100,7 +101,7 @@ export default function MultiplayerPlayPage() {
             gameId, 
             playerCount: playerCountParam || "duo", 
             rejoiningPlayerId: storedPlayerId,
-            username: username || undefined // Send username
+            username: username || undefined 
         });
     });
     
@@ -114,7 +115,7 @@ export default function MultiplayerPlayPage() {
                     if (serverPlayer.socketId || pid === storedPlayerId) { 
                         newPlayersData[pid] = {
                             socketId: serverPlayer.socketId,
-                            displayName: serverPlayer.displayName || pid, // Use displayName from server
+                            displayName: serverPlayer.displayName || pid,
                             guessesMade: serverPlayer.guessesMade || [], 
                             guessesAgainst: serverPlayer.guessesAgainst || [],
                             isReady: serverPlayer.isReady,
@@ -152,7 +153,7 @@ export default function MultiplayerPlayPage() {
                     Object.keys(data.targetMap).forEach(pid => {
                         if (!initialPlayersData[pid]) { 
                             initialPlayersData[pid] = { 
-                                displayName: prev.playersData[pid]?.displayName || pid, // Try to preserve existing displayName if any
+                                displayName: prev.playersData[pid]?.displayName || pid, 
                                 guessesMade: [], 
                                 guessesAgainst: [] 
                             };
@@ -244,7 +245,7 @@ export default function MultiplayerPlayPage() {
         newSocket.disconnect();
         setSocket(null);
     };
-  }, [gameId, router, toast, playerCountParam, username]); // Added username
+  }, [gameId, router, toast, playerCountParam, username, gameState.myPlayerId]); // Added gameState.myPlayerId to deps
 
   useEffect(() => {
     let timerInterval: NodeJS.Timeout | undefined;
@@ -350,7 +351,6 @@ export default function MultiplayerPlayPage() {
   const opponentPlayerData = opponentId ? gameState.playersData[opponentId] : null;
 
   if (gameState.gameStatus === 'IN_PROGRESS' && (!myPlayerData || !opponentId || !gameState.currentTurnPlayerId)) {
-     // OpponentPlayerData might be missing if they disconnect, game might end soon by server.
      console.log(`[MultiplayerPlay] IN_PROGRESS but missing some data. myPlayerData: ${!!myPlayerData}, opponentId: ${opponentId}, currentTurn: ${gameState.currentTurnPlayerId}`);
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]">
@@ -413,4 +413,3 @@ export default function MultiplayerPlayPage() {
     </div>
   );
 }
-
