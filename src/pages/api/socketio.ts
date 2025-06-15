@@ -4,8 +4,8 @@ import type { Socket as NetSocket } from 'net';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import type { GameRoom, PlayerData, Guess, MultiplayerGameStatus } from '@/types/game';
-import { calculateFeedback, checkWin } from '@/lib/gameLogic';
-import { MongoClient, Db as MongoDb, FindOneAndUpdateOptions, MongoError, ObjectId } from 'mongodb';
+import { calculateFeedback, checkWin, CODE_LENGTH } from '@/lib/gameLogic';
+import { MongoClient, Db as MongoDb, FindOneAndUpdateOptions, MongoError } from 'mongodb';
 
 interface NextApiResponseWithSocket extends NextApiResponse {
   socket: NetSocket & {
@@ -37,11 +37,6 @@ let dbConnectionPromise: Promise<MongoDb | null> = (async () => {
     const connectedDb = client.db(DATABASE_NAME);
     console.log(`[SocketIO] Successfully connected to MongoDB. Database: ${DATABASE_NAME}`);
     console.log(`[SocketIO] Targeting collection: '${COLLECTION_NAME}'. Ensure unique index on 'gameId' and TTL index on 'createdAt'.`);
-    
-    // Ensure indexes (optional: can be done manually in MongoDB Atlas/shell)
-    // await connectedDb.collection(COLLECTION_NAME).createIndex({ gameId: 1 }, { unique: true });
-    // await connectedDb.collection(COLLECTION_NAME).createIndex({ createdAt: 1 }, { expireAfterSeconds: 3600 * 24 }); // 24-hour TTL
-
     return connectedDb;
   } catch (error) {
     console.error("[SocketIO] Error connecting to MongoDB:", error);
@@ -53,7 +48,6 @@ async function getGameRoom(gameId: string): Promise<GameRoom | null> {
   const currentDb = await dbConnectionPromise;
   if (!currentDb) return null;
   try {
-    // Find by gameId, excluding MongoDB's _id field from the returned document
     const roomDocument = await currentDb.collection(COLLECTION_NAME).findOne({ gameId: gameId }, { projection: { _id: 0 } });
     return roomDocument as GameRoom | null;
   } catch (error) {
@@ -81,20 +75,20 @@ async function createGameRoom(gameId: string, playerCount: number, hostSocketId:
         players: { "player1": initialPlayerData },
         status: 'WAITING_FOR_PLAYERS',
         targetMap: {},
-        createdAt: new Date(), // For TTL index
+        createdAt: new Date(),
     };
 
     try {
       const result = await currentDb.collection<Omit<GameRoom, '_id'>>(COLLECTION_NAME).insertOne(roomToInsert);
       if (result.insertedId) {
         console.log(`[SocketIO-DB] Game room ${gameId} created successfully by host ${hostSocketId}.`);
-        return roomToInsert; // Return the inserted object (without _id as per GameRoom type)
+        return roomToInsert;
       }
       return null;
     } catch (error: any) {
       if (error instanceof MongoError && error.code === 11000) { 
         console.warn(`[SocketIO-DB] createGameRoom: ${gameId} already exists. Attempting to fetch.`);
-        return getGameRoom(gameId); // Try to fetch existing if duplicate key error
+        return getGameRoom(gameId);
       }
       console.error(`[SocketIO-DB] createGameRoom: Error creating game room ${gameId}:`, error);
       return null;
@@ -106,7 +100,6 @@ async function updateGameRoom(gameId: string, updateOperators: any): Promise<Gam
   if (!currentDb) return null;
 
   const filter = { gameId: gameId };
-  // Ensure projection excludes _id if it's not part of GameRoom type
   const options: FindOneAndUpdateOptions = { returnDocument: 'after', upsert: false, projection: { _id: 0 } };
 
   try {
@@ -127,7 +120,7 @@ const getPlayerCountNumber = (playerCountString: string | null): number => {
 
 
 export default async function handler(req: NextApiRequest, res: NextApiResponseWithSocket) {
-  if (req.method === 'POST') { // This POST is only to ensure the server-side setup runs once.
+  if (req.method === 'POST') { 
     if (!res.socket.server.io) {
       console.log('[SocketIO] Initializing Socket.IO server...');
       const io = new SocketIOServer(res.socket.server, {
@@ -163,18 +156,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
               const updateOps: any = { 
                   $set: { 
                       [`players.${playerId}.socketId`]: undefined,
-                      // If game wasn't in progress, reset readiness. If it was, keep secret for potential rejoin to game over screen?
-                      // For now, always reset readiness if game not over.
-                      [`players.${playerId}.isReady`]: room.status === 'IN_PROGRESS' || room.status === 'GAME_OVER' ? room.players[playerId].isReady : false,
-                      // Keep hasSetSecret true if they did set it.
+                      [`players.${playerId}.isReady`]: (room.status === 'IN_PROGRESS' || room.status === 'GAME_OVER') ? room.players[playerId].isReady : false,
+                      [`players.${playerId}.hasSetSecret`]: (room.status === 'IN_PROGRESS' || room.status === 'GAME_OVER') ? room.players[playerId].hasSetSecret : false,
                   } 
               };
               
               let updatedRoom = await updateGameRoom(gameId, updateOps);
               if (!updatedRoom) {
                   console.warn(`[SocketIO] Disconnect ${socket.id}: Failed to update room ${gameId} for player ${playerId}. Fetching last known state.`);
-                  updatedRoom = await getGameRoom(gameId); // Fetch again to be sure
-                  if(!updatedRoom) return; // If still not found, nothing more to do
+                  updatedRoom = await getGameRoom(gameId); 
+                  if(!updatedRoom) return; 
               }
                
               const activePlayersWithSocketId = Object.values(updatedRoom.players).filter(p => p.socketId);
@@ -187,21 +178,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
                       updatedRoom.status = allActivePlayersReady ? 'READY_TO_START' : 'WAITING_FOR_READY';
                   }
                   const statusUpdate = await updateGameRoom(gameId, {$set: {status: updatedRoom.status}});
-                  if (statusUpdate) updatedRoom = statusUpdate; else updatedRoom = await getGameRoom(gameId);
+                  if (statusUpdate) updatedRoom = statusUpdate; 
+                  else {
+                    const refetchedRoom = await getGameRoom(gameId);
+                    if (refetchedRoom) updatedRoom = refetchedRoom; else return;
+                  }
               }
-              else if (updatedRoom.status === 'IN_PROGRESS' && updatedRoom.playerCount > 0 && activePlayersWithSocketId.length < updatedRoom.playerCount) {
-                  // Simplified: if one player disconnects from a 2-player game, the other wins.
-                  // For >2 players, more complex logic needed (e.g. game continues or ends based on rules)
+              else if (updatedRoom.status === 'IN_PROGRESS' && updatedRoom.playerCount === 2 && activePlayersWithSocketId.length < updatedRoom.playerCount) {
                   const winnerId = activePlayersWithSocketId[0] ? Object.keys(updatedRoom.players).find(pId => updatedRoom!.players[pId]?.socketId === activePlayersWithSocketId[0].socketId) : undefined;
-                  if(winnerId && updatedRoom.playerCount === 2){ // Only auto-end for duo for now
-                      console.log(`[SocketIO] Game ${gameId}: Player ${playerId} disconnected during active game. ${winnerId} wins by default.`);
+                  
+                  // Check if targetMap exists and is populated (game truly started)
+                  const gameFullyStarted = updatedRoom.targetMap && Object.keys(updatedRoom.targetMap).length > 0;
+                  const anyGuessesMadeInGame = Object.values(updatedRoom.players).some(pData => pData.guessesMade && pData.guessesMade.length > 0);
+
+                  if(winnerId && gameFullyStarted && anyGuessesMadeInGame){ 
+                      console.log(`[SocketIO] Game ${gameId}: Player ${playerId} disconnected during active game with guesses made. ${winnerId} wins by default.`);
                       const finalRoomState = await updateGameRoom(gameId, {$set: {status: 'GAME_OVER', winner: winnerId, turn: undefined}});
                       if (finalRoomState) {
                           io.to(gameId).emit('game-over', {gameId, winner: winnerId});
                           updatedRoom = finalRoomState;
                       } else {
-                          updatedRoom = await getGameRoom(gameId);
+                          const refetchedRoom = await getGameRoom(gameId);
+                           if (refetchedRoom) updatedRoom = refetchedRoom; else return;
                       }
+                  } else if (winnerId && (!gameFullyStarted || !anyGuessesMadeInGame)) {
+                      console.log(`[SocketIO] Game ${gameId}: Player ${playerId} disconnected immediately after game start or before guesses. Game not ended automatically. Room status remains IN_PROGRESS.`);
                   }
               }
               
@@ -220,7 +221,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
 
               let room = await getGameRoom(gameId);
               let assignedPlayerId: string | undefined = undefined;
-              let isNewPlayer = false;
 
               if (!room) {
                   if (isHost) {
@@ -228,20 +228,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
                       room = await createGameRoom(gameId, numPlayerCount, socket.id);
                       if (!room) { socket.emit('error-event', { message: 'Failed to create room.' }); return; }
                       assignedPlayerId = "player1";
-                      isNewPlayer = true; // First player in a new room
                   } else {
                       socket.emit('error-event', { message: 'Room not found.' }); return;
                   }
               } else { 
-                  if (rejoiningPlayerId && room.players[rejoiningPlayerId]) {
+                  if (rejoiningPlayerId && room.players && room.players[rejoiningPlayerId]) {
                       const playerSlot = room.players[rejoiningPlayerId];
                       if (playerSlot.socketId && playerSlot.socketId !== socket.id) {
                            socket.emit('error-event', { message: `Slot ${rejoiningPlayerId} is currently active with another session.` }); return;
                       }
                       console.log(`[SocketIO] Game ${gameId}: Player ${rejoiningPlayerId} (${socket.id}) rejoining.`);
                       assignedPlayerId = rejoiningPlayerId;
-                      // Preserve existing player data, just update socketId
-                      room.players[rejoiningPlayerId].socketId = socket.id; 
+                      if(room.players[assignedPlayerId]) room.players[assignedPlayerId]!.socketId = socket.id; 
+                      
                   } else {
                       let foundSlot = false;
                       for (let i = 1; i <= room.playerCount; i++) {
@@ -250,14 +249,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
                               assignedPlayerId = potentialPlayerId;
                               room.players[assignedPlayerId] = { 
                                   socketId: socket.id, 
-                                  secret: [], 
-                                  guessesMade: [], 
-                                  guessesAgainst: [], 
-                                  hasSetSecret: false, 
-                                  isReady: false 
+                                  secret: room.players[assignedPlayerId]?.secret || [], 
+                                  guessesMade: room.players[assignedPlayerId]?.guessesMade || [], 
+                                  guessesAgainst: room.players[assignedPlayerId]?.guessesAgainst || [], 
+                                  hasSetSecret: room.players[assignedPlayerId]?.hasSetSecret || false, 
+                                  isReady: room.players[assignedPlayerId]?.isReady || false
                               };
                               console.log(`[SocketIO] Game ${gameId}: New player ${assignedPlayerId} (${socket.id}) assigned.`);
-                              isNewPlayer = true;
                               foundSlot = true;
                               break;
                           }
@@ -278,27 +276,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
               
               socket.playerId = assignedPlayerId;
               socket.gameId = gameId;
-              await socket.join(gameId); // Make sure join is awaited or handled if it's async in some lib versions
+              await socket.join(gameId); 
               socket.emit('player-assigned', { playerId: assignedPlayerId, gameId });
 
               const activePlayersWithSocketId = Object.values(room.players).filter(p => p.socketId);
-              if (activePlayersWithSocketId.length === room.playerCount && room.status === 'WAITING_FOR_PLAYERS') {
-                  room.status = 'WAITING_FOR_READY';
-              } else if (activePlayersWithSocketId.length < room.playerCount && room.status !== 'GAME_OVER') {
-                   room.status = 'WAITING_FOR_PLAYERS'; 
-              } else if (room.status === 'WAITING_FOR_READY') {
-                  // If room was waiting for ready, and a player reconnected, check if now ready to start
-                  const allActivePlayersReady = activePlayersWithSocketId.every(p => p.isReady);
-                  if (allActivePlayersReady && activePlayersWithSocketId.length === room.playerCount) {
-                      room.status = 'READY_TO_START';
-                  }
+             
+              if (room.status !== 'IN_PROGRESS' && room.status !== 'GAME_OVER') {
+                if (activePlayersWithSocketId.length === room.playerCount) {
+                    const allActivePlayersReady = activePlayersWithSocketId.every(p => p.isReady);
+                    room.status = allActivePlayersReady ? 'READY_TO_START' : 'WAITING_FOR_READY';
+                } else if (activePlayersWithSocketId.length < room.playerCount) {
+                    room.status = 'WAITING_FOR_PLAYERS'; 
+                }
               }
               
               const finalRoomState = await updateGameRoom(gameId, { $set: { players: room.players, status: room.status } });
               if (!finalRoomState) { 
                   console.error(`[SocketIO-DB] Critical: Failed to save final room state for ${gameId} after join. Player: ${assignedPlayerId}`);
                   socket.emit('error-event', { message: 'Server error saving game state.' });
-                  const fetchedRoom = await getGameRoom(gameId); // Attempt to get current state
+                  const fetchedRoom = await getGameRoom(gameId); 
                   if (fetchedRoom) io.to(gameId).emit('game-state-update', fetchedRoom);
                   return;
               }
@@ -319,15 +315,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             console.log(`[SocketIO] Socket ${socket.id} (Player ${socket.playerId}) attempting to set secret & ready for game: ${gameId}.`);
             
             let room = await getGameRoom(gameId);
-            if (!room) {
-                socket.emit('error-event', { message: 'Game room not found.' });
-                return;
-            }
-            if (!room.players || !room.players[socket.playerId!]) {
-                socket.emit('error-event', { message: 'Player not found in room.' });
-                return;
-            }
-        
+            if (!room) { socket.emit('error-event', { message: 'Game room not found.' }); return; }
+            if (!room.players || !room.players[socket.playerId!] ) { socket.emit('error-event', { message: 'Player not found in room.' }); return; }
+            if (secret.length !== CODE_LENGTH) { socket.emit('error-event', {message: `Secret must be ${CODE_LENGTH} digits.`}); return; }
+
+
             const playerUpdatePath = `players.${socket.playerId}`;
             const updateOps = {
                 $set: {
@@ -344,20 +336,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
                 return;
             }
             
-            io.to(gameId).emit('game-state-update', updatedRoom); // Notify all players of the updated state (e.g., player is ready)
+            io.to(gameId).emit('game-state-update', updatedRoom); 
         
-            // Check if all active players are ready
             const activePlayers = Object.values(updatedRoom.players).filter(p => p.socketId);
-            const allActivePlayersReady = activePlayers.length === updatedRoom.playerCount && activePlayers.every(p => p.isReady);
+            const allActivePlayersReady = activePlayers.length === updatedRoom.playerCount && activePlayers.every(p => p.isReady && p.hasSetSecret);
         
-            if (allActivePlayersReady) {
+            if (allActivePlayersReady && updatedRoom.status === 'WAITING_FOR_READY') {
                 console.log(`[SocketIO] Game ${gameId}: All ${updatedRoom.playerCount} players are ready. Status changing to READY_TO_START.`);
                 const finalRoomState = await updateGameRoom(gameId, { $set: { status: 'READY_TO_START' } });
                 if (finalRoomState) {
                     io.to(gameId).emit('game-state-update', finalRoomState);
                 } else {
                      console.error(`[SocketIO-DB] Failed to update room ${gameId} to READY_TO_START.`);
-                     // Attempt to refetch and send, or handle error
                      const currentRoomState = await getGameRoom(gameId);
                      if(currentRoomState) io.to(gameId).emit('game-state-update', currentRoomState);
                 }
@@ -372,28 +362,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             }
 
             let room = await getGameRoom(gameId);
-            if (!room) {
-                socket.emit('error-event', { message: 'Game room not found.' });
-                return;
-            }
+            if (!room) { socket.emit('error-event', { message: 'Game room not found.' }); return; }
             if (room.status !== 'READY_TO_START') {
                 socket.emit('error-event', { message: `Game is not ready to start. Current status: ${room.status}` });
                 return;
             }
 
-            // Double check all players are still connected and ready
-            const activePlayers = Object.values(room.players).filter(p => p.socketId && p.isReady);
+            const activePlayers = Object.values(room.players).filter(p => p.socketId && p.isReady && p.hasSetSecret);
             if (activePlayers.length !== room.playerCount) {
                  socket.emit('error-event', { message: 'Not all players are ready or connected.' });
-                 // Optionally revert status to WAITING_FOR_READY if needed
                  const revertedRoom = await updateGameRoom(gameId, {$set: { status: 'WAITING_FOR_READY'}});
                  if(revertedRoom) io.to(gameId).emit('game-state-update', revertedRoom);
                  return;
             }
-
-            // Determine turn and targetMap (simple for 2 players)
-            const playerIds = Object.keys(room.players).filter(pid => room!.players[pid].socketId); // Get active player IDs
-            if (playerIds.length !== 2) { // Assuming duo mode for now
+            
+            const playerIds = Object.keys(room.players).filter(pid => room!.players[pid]?.socketId); 
+            if (playerIds.length !== 2) { 
                 socket.emit('error-event', {message: 'Target mapping only supported for 2 players currently.'});
                 return;
             }
@@ -415,7 +399,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             if (startedRoom) {
                 console.log(`[SocketIO] Game ${gameId} starting by host ${socket.playerId}. Turn: ${startingPlayer}, TargetMap: ${JSON.stringify(targetMap)}`);
                 io.to(gameId).emit('game-start', { gameId, startingPlayer, targetMap });
-                io.to(gameId).emit('game-state-update', startedRoom); // ensure final state is sent
+                io.to(gameId).emit('game-state-update', startedRoom); 
             } else {
                 socket.emit('error-event', { message: 'Failed to start game server-side.' });
                 console.error(`[SocketIO-DB] Failed to update room ${gameId} to IN_PROGRESS.`);
@@ -426,39 +410,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             const { gameId, playerId: clientPlayerId, guess: guessArray } = data;
         
             if (socket.playerId !== clientPlayerId) {
-                console.warn(`[SocketIO] Security Alert: Socket ${socket.id} (server-assigned: ${socket.playerId}) ` +
-                             `tried to make guess using client-provided ID ${clientPlayerId} in game ${gameId}. Denying.`);
-                socket.emit('error-event', { message: 'Player ID mismatch for guess.' });
-                return;
+                socket.emit('error-event', { message: 'Player ID mismatch for guess.' }); return;
             }
         
             let room = await getGameRoom(gameId);
-            if (!room) {
-                socket.emit('error-event', { message: 'Game room not found for guess.' });
-                return;
-            }
-            if (room.status !== 'IN_PROGRESS') {
-                socket.emit('error-event', { message: 'Game is not in progress.' });
-                return;
-            }
-            if (room.turn !== socket.playerId) {
-                socket.emit('error-event', { message: 'Not your turn.' });
-                return;
-            }
-            if (!room.targetMap || !room.players) {
-                socket.emit('error-event', { message: 'Game configuration error (targetMap or players missing).' });
-                console.error(`[SocketIO] Game ${gameId}: targetMap or players missing for guess processing.`);
-                return;
-            }
+            if (!room) { socket.emit('error-event', { message: 'Game room not found for guess.' }); return; }
+            if (room.status !== 'IN_PROGRESS') { socket.emit('error-event', { message: 'Game is not in progress.' }); return; }
+            if (room.turn !== socket.playerId) { socket.emit('error-event', { message: 'Not your turn.' }); return; }
+            if (!room.targetMap || !room.players) { socket.emit('error-event', { message: 'Game configuration error.' }); return; }
         
             const targetPlayerId = room.targetMap[socket.playerId!];
+            if(!targetPlayerId) { socket.emit('error-event', { message: 'Target player not found.'}); return; }
+
             const targetPlayer = room.players[targetPlayerId];
-        
             if (!targetPlayer || !targetPlayer.secret || targetPlayer.secret.length === 0) {
-                socket.emit('error-event', { message: 'Opponent secret not set.' });
-                console.error(`[SocketIO] Game ${gameId}: Target player ${targetPlayerId} or their secret not found.`);
-                return;
+                socket.emit('error-event', { message: 'Opponent secret not set.' }); return;
             }
+             if (guessArray.length !== CODE_LENGTH) { socket.emit('error-event', {message: `Guess must be ${CODE_LENGTH} digits.`}); return; }
         
             const feedback = calculateFeedback(guessArray, targetPlayer.secret);
             const guessString = guessArray.join('');
@@ -470,32 +438,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             const updateOps: any = {
                 $push: {
                     [playerGuessesPath]: newGuess,
-                    [opponentGuessesAgainstPath]: newGuess // Record guess against opponent
+                    [opponentGuessesAgainstPath]: newGuess 
                 }
             };
         
             let winner: string | undefined = undefined;
             if (checkWin(feedback)) {
                 winner = socket.playerId;
-                updateOps.$set = {
-                    status: 'GAME_OVER',
-                    winner: winner,
-                    turn: undefined, // No more turns
-                };
+                updateOps.$set = { status: 'GAME_OVER', winner: winner, turn: undefined };
                 console.log(`[SocketIO] Game ${gameId}: Player ${winner} has won!`);
             } else {
-                // Switch turn
-                updateOps.$set = {
-                    turn: targetPlayerId, // Next turn is the opponent's
-                };
+                updateOps.$set = { turn: targetPlayerId };
             }
         
             const updatedRoom = await updateGameRoom(gameId, updateOps);
-            if (!updatedRoom) {
-                socket.emit('error-event', { message: 'Failed to record guess.' });
-                console.error(`[SocketIO-DB] Failed to update room ${gameId} after guess by ${socket.playerId}.`);
-                return;
-            }
+            if (!updatedRoom) { socket.emit('error-event', { message: 'Failed to record guess.' }); return; }
         
             io.to(gameId).emit('guess-feedback', { 
                 gameId, 
@@ -509,14 +466,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponseW
             } else {
                 io.to(gameId).emit('turn-update', { gameId, nextPlayerId: targetPlayerId });
             }
-            io.to(gameId).emit('game-state-update', updatedRoom); // Send full state update
+            io.to(gameId).emit('game-state-update', updatedRoom); 
         });
-
-
       });
-    } else {
-    //   console.log("[SocketIO] Socket.IO server already running.");
     }
   }
   res.end();
 }
+
+    
