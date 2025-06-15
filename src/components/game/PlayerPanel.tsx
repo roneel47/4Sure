@@ -72,7 +72,7 @@ export default function PlayerPanel({
         )}
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="h-64">
+        <div className="h-48"> {/* Reduced height from h-64 to h-48 */}
           <ScrollArea className="h-full pr-3">
             {guesses.length === 0 && (
               <p className="text-muted-foreground text-center py-8">No guesses made yet.</p>
@@ -101,3 +101,4 @@ export default function PlayerPanel({
     </Card>
   );
 }
+
