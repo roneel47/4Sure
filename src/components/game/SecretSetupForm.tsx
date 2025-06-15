@@ -50,9 +50,10 @@ export default function SecretSetupForm() {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <CardTitle className="text-lg sm:text-xl md:text-2xl lg:text-3xl text-primary flex items-center justify-center flex-grow overflow-hidden">
+          <CardTitle className="text-lg sm:text-xl md:text-2xl lg:text-3xl text-primary flex items-center justify-center flex-grow">
             <LockKeyhole className="mr-1 sm:mr-2 md:mr-2 lg:mr-3 h-5 w-5 sm:h-6 sm:h-6 md:h-7 w-7 lg:h-8 lg:w-8 shrink-0" />
-            <span className="whitespace-nowrap text-ellipsis overflow-hidden">Set Your Secret Number</span>
+            {/* Removed whitespace-nowrap, text-ellipsis, overflow-hidden to allow wrapping */}
+            <span>Set Your Secret Number</span>
           </CardTitle>
           <div className="w-10 ml-2 shrink-0"> {/* Spacer to balance the back button */}</div>
         </div>
