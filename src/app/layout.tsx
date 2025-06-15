@@ -4,6 +4,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { AppProviders } from '@/contexts/AppProviders';
 import Footer from '@/components/layout/Footer'; // Import the Footer component
+import Header from '@/components/layout/Header'; // Import the Header component
 
 export const metadata: Metadata = {
   title: '4Sure',
@@ -25,6 +26,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-screen flex flex-col">
         <AppProviders>
+          <Header /> {/* Add the Header component here */}
           {children}
           <Toaster />
         </AppProviders>
