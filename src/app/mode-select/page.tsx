@@ -1,15 +1,15 @@
 
 "use client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Users, User, ArrowRight } from "lucide-react";
+import { Users, User, ArrowRight, LogOut } from "lucide-react"; // Added LogOut
 import Image from "next/image";
 
 export default function ModeSelectPage() {
-  const { isLoggedIn, isAuthLoading, username } = useAuth();
+  const { isLoggedIn, isAuthLoading, username, logout } = useAuth(); // Added logout
   const router = useRouter();
 
   useEffect(() => {
@@ -39,27 +39,31 @@ export default function ModeSelectPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button 
-            onClick={() => router.push('/setup')} 
-            className="w-full" 
+          <Button
+            onClick={() => router.push('/setup')}
+            className="w-full"
             size="lg"
             variant="outline"
           >
             <User className="mr-2 h-5 w-5" /> Single Player (vs Computer)
             <ArrowRight className="ml-auto h-5 w-5" />
           </Button>
-          <Button 
-            onClick={() => router.push('/multiplayer-setup')} 
-            className="w-full" 
+          <Button
+            onClick={() => router.push('/multiplayer-setup')}
+            className="w-full"
             size="lg"
-            variant="outline" // Changed from default to outline
+            variant="outline"
           >
             <Users className="mr-2 h-5 w-5" /> Multiplayer
             <ArrowRight className="ml-auto h-5 w-5" />
           </Button>
         </CardContent>
+        <CardFooter className="flex flex-col items-center pt-4">
+          <Button variant="link" onClick={logout} className="text-sm">
+            <LogOut className="mr-2 h-4 w-4" /> Back to Username Select
+          </Button>
+        </CardFooter>
       </Card>
     </main>
   );
 }
-
