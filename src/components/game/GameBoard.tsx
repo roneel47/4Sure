@@ -1,5 +1,6 @@
 
 "use client";
+import { useEffect } from 'react'; // Added useEffect
 import { useGame } from '@/contexts/GameContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PlayerPanel from './PlayerPanel';
@@ -29,6 +30,14 @@ export default function GameBoard() {
   const { username } = useAuth();
   const router = useRouter();
 
+  useEffect(() => {
+    if (gameStatus === "SETUP_PLAYER" || gameStatus === "WAITING_OPPONENT_SECRET") {
+      if (typeof window !== 'undefined') { // Keep window check for safety, though less critical in useEffect
+        router.replace("/setup");
+      }
+    }
+  }, [gameStatus, router]);
+
   const handleRestartGame = () => {
     initializeGame();
     router.push('/setup'); 
@@ -45,7 +54,7 @@ export default function GameBoard() {
   }
 
   if (gameStatus === "SETUP_PLAYER" || gameStatus === "WAITING_OPPONENT_SECRET") {
-    if (typeof window !== 'undefined') router.replace("/setup");
+    // The redirect is now handled by useEffect. Show a loading message or null while it happens.
     return <div className="flex-grow flex items-center justify-center"><p>Loading game setup...</p></div>;
   }
   
