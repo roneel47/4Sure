@@ -366,52 +366,56 @@ export default function MultiplayerPlayPage() {
   const turnPlayerDisplayName = gameState.currentTurnPlayerId ? (gameState.playersData[gameState.currentTurnPlayerId]?.displayName || gameState.currentTurnPlayerId) : "Someone";
 
   return (
-    <div className="relative space-y-6">
-       <Button onClick={handleExitGame} variant="outline" className="absolute top-4 right-4 z-20">
+    <div className="relative"> {/* Outer relative container for button positioning */}
+       <Button onClick={handleExitGame} variant="outline" className="absolute top-0 right-0 z-20">
          <LogOut className="mr-2 h-4 w-4" /> Exit Game
        </Button>
-       <div className={`text-center py-3 mb-4 rounded-lg bg-card shadow-md flex flex-col items-center ${gameState.currentTurnPlayerId === gameState.myPlayerId ? 'border-2 border-primary ring-2 ring-primary/50' : 'border border-border'}`}>
-        {gameState.currentTurnPlayerId && (
-            <TurnIndicator 
-              currentPlayerName={turnPlayerDisplayName} 
-              isPlayerTurn={gameState.currentTurnPlayerId === gameState.myPlayerId} 
-            />
-        )}
-        {gameState.gameStatus === 'IN_PROGRESS' && !gameState.winner && (
-             <TimerDisplay timeLeft={gameState.timeLeft} isTimerActive={gameState.isTimerActive && gameState.currentTurnPlayerId === gameState.myPlayerId} />
-        )}
-      </div>
+       {/* Main content flow with padding-top to avoid button on mobile */}
+       <div className="space-y-6 pt-14 md:pt-0">
+         <div className={`text-center py-3 mb-4 rounded-lg bg-card shadow-md flex flex-col items-center ${gameState.currentTurnPlayerId === gameState.myPlayerId ? 'border-2 border-primary ring-2 ring-primary/50' : 'border border-border'}`}>
+          {gameState.currentTurnPlayerId && (
+              <TurnIndicator 
+                currentPlayerName={turnPlayerDisplayName} 
+                isPlayerTurn={gameState.currentTurnPlayerId === gameState.myPlayerId} 
+              />
+          )}
+          {gameState.gameStatus === 'IN_PROGRESS' && !gameState.winner && (
+               <TimerDisplay timeLeft={gameState.timeLeft} isTimerActive={gameState.isTimerActive && gameState.currentTurnPlayerId === gameState.myPlayerId} />
+          )}
+        </div>
 
-      <div className="flex flex-col md:flex-row gap-4 sm:gap-6">
-        {myPlayerData && gameState.myPlayerId && (
-          <PlayerPanel
-            playerName={`${myPlayerData.displayName || username || gameState.myPlayerId} (You)`}
-            isCurrentPlayer={true}
-            isPlayerTurn={gameState.currentTurnPlayerId === gameState.myPlayerId}
-            guesses={myPlayerData.guessesMade || []}
-            onMakeGuess={handleMakeGuess}
-            isSubmitting={isSubmittingGuess && gameState.currentTurnPlayerId === gameState.myPlayerId}
-            secretForDisplay={gameState.mySecret} 
-          />
-        )}
-        {opponentPlayerData && opponentId && ( 
-          <PlayerPanel
-            playerName={opponentPlayerData.displayName || opponentId}
-            isCurrentPlayer={false}
-            isPlayerTurn={gameState.currentTurnPlayerId === opponentId}
-            guesses={opponentPlayerData.guessesMade || []} 
-            onMakeGuess={() => {}} 
-            isSubmitting={false} 
-            secretForDisplay={undefined} 
-          />
-        )}
-        {!opponentPlayerData && opponentId && gameState.gameStatus === 'IN_PROGRESS' && (
-             <Card className="flex-1 w-full shadow-lg border-border">
-                <CardHeader><CardTitle>{(gameState.playersData[opponentId]?.displayName || opponentId) + (gameState.playersData[opponentId]?.socketId ? '' : ' (Disconnected)')}</CardTitle></CardHeader>
-                <CardContent><p className="text-muted-foreground text-center py-8">Opponent {(gameState.playersData[opponentId]?.socketId ? 'data unavailable' : 'has disconnected')}.</p></CardContent>
-             </Card>
-        )}
+        <div className="flex flex-col md:flex-row gap-4 sm:gap-6">
+          {myPlayerData && gameState.myPlayerId && (
+            <PlayerPanel
+              playerName={`${myPlayerData.displayName || username || gameState.myPlayerId} (You)`}
+              isCurrentPlayer={true}
+              isPlayerTurn={gameState.currentTurnPlayerId === gameState.myPlayerId}
+              guesses={myPlayerData.guessesMade || []}
+              onMakeGuess={handleMakeGuess}
+              isSubmitting={isSubmittingGuess && gameState.currentTurnPlayerId === gameState.myPlayerId}
+              secretForDisplay={gameState.mySecret} 
+            />
+          )}
+          {opponentPlayerData && opponentId && ( 
+            <PlayerPanel
+              playerName={opponentPlayerData.displayName || opponentId}
+              isCurrentPlayer={false}
+              isPlayerTurn={gameState.currentTurnPlayerId === opponentId}
+              guesses={opponentPlayerData.guessesMade || []} 
+              onMakeGuess={() => {}} 
+              isSubmitting={false} 
+              secretForDisplay={undefined} 
+            />
+          )}
+          {!opponentPlayerData && opponentId && gameState.gameStatus === 'IN_PROGRESS' && (
+               <Card className="flex-1 w-full shadow-lg border-border">
+                  <CardHeader><CardTitle>{(gameState.playersData[opponentId]?.displayName || opponentId) + (gameState.playersData[opponentId]?.socketId ? '' : ' (Disconnected)')}</CardTitle></CardHeader>
+                  <CardContent><p className="text-muted-foreground text-center py-8">Opponent {(gameState.playersData[opponentId]?.socketId ? 'data unavailable' : 'has disconnected')}.</p></CardContent>
+               </Card>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
