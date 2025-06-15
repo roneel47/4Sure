@@ -2,9 +2,10 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { useGame } from "@/contexts/GameContext";
-import { LogOut } from "lucide-react";
+import { LogOut, HelpCircle } from "lucide-react"; // Added HelpCircle
 import Link from "next/link";
 import Image from "next/image";
+import HowToPlayDialog from "./HowToPlayDialog"; // Import the new dialog
 
 export default function Header() {
   const { exitGame, gameStatus } = useGame();
@@ -15,11 +16,14 @@ export default function Header() {
         <Link href="/" className="hover:opacity-80 transition-opacity">
           <Image src="/logo.svg" alt="4Sure Logo" width={100} height={30} priority />
         </Link>
-        {(gameStatus !== "SETUP_PLAYER" && gameStatus !== "WAITING_OPPONENT_SECRET") && (
-          <Button variant="destructive" onClick={exitGame} size="sm">
-            <LogOut className="mr-2 h-4 w-4" /> Exit Game
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <HowToPlayDialog /> 
+          {(gameStatus !== "SETUP_PLAYER" && gameStatus !== "WAITING_OPPONENT_SECRET") && (
+            <Button variant="destructive" onClick={exitGame} size="sm">
+              <LogOut className="mr-2 h-4 w-4" /> Exit Game
+            </Button>
+          )}
+        </div>
       </div>
     </header>
   );
