@@ -1,6 +1,6 @@
 
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Added useEffect
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -20,8 +20,28 @@ export default function MultiplayerSetupPage() {
   const [step, setStep] = useState<MultiplayerStep>("playerCount");
   const [playerCount, setPlayerCount] = useState<PlayerCount>("duo");
   const [hostJoin, setHostJoin] = useState<HostJoin>(null);
-  const [gameIdInput, setGameIdInput] = useState<string>(""); // Renamed from gameId to avoid confusion
+  const [gameIdInput, setGameIdInput] = useState<string>("");
   const [generatedGameId, setGeneratedGameId] = useState<string | null>(null);
+  const [isServerReady, setIsServerReady] = useState(false); // New state
+
+  // useEffect to trigger backend initialization
+  useEffect(() => {
+    console.log("[MultiplayerSetup] Initializing server-side components...");
+    fetch('/api/socketio', { method: 'POST' })
+      .then(res => {
+        if (res.ok) {
+          console.log("[MultiplayerSetup] Server-side components signaled for initialization.");
+          setIsServerReady(true);
+        } else {
+          console.error("[MultiplayerSetup] Failed to signal server-side components.");
+          toast({ title: "Connection Error", description: "Could not prepare multiplayer service. Please try again.", variant: "destructive" });
+        }
+      })
+      .catch(err => {
+        console.error("[MultiplayerSetup] Error signaling server-side components:", err);
+        toast({ title: "Network Error", description: "Failed to connect to multiplayer service.", variant: "destructive" });
+      });
+  }, [toast]); // toast dependency added
 
   const handlePlayerCountSelect = (value: string) => {
     setPlayerCount(value as PlayerCount);
@@ -38,12 +58,15 @@ export default function MultiplayerSetupPage() {
   };
 
   const proceedToNextStep = () => {
+    if (!isServerReady) {
+      toast({ title: "Server Not Ready", description: "Multiplayer service is not ready. Please wait or try refreshing.", variant: "destructive"});
+      return;
+    }
     if (step === "playerCount" && playerCount) {
       setStep("hostJoin");
     } else if (step === "hostJoin" && hostJoin) {
       const finalGameId = hostJoin === 'host' ? generatedGameId : gameIdInput;
       if (finalGameId && playerCount) {
-        // For host, pass isHost=true
         const isHostQueryParam = hostJoin === 'host' ? '&isHost=true' : '';
         router.push(`/multiplayer-secret-setup?gameId=${finalGameId.toUpperCase()}&playerCount=${playerCount}${isHostQueryParam}`);
       } else {
@@ -183,14 +206,14 @@ export default function MultiplayerSetupPage() {
         </CardContent>
 
         <CardFooter className="flex flex-col gap-4">
-           {(step === "playerCount" && playerCount) || (step === "hostJoin" && hostJoin && (hostJoin === 'host' || (hostJoin === 'join' && gameIdInput))) ? (
+           {((step === "playerCount" && playerCount) || (step === "hostJoin" && hostJoin && (hostJoin === 'host' || (hostJoin === 'join' && gameIdInput)))) && isServerReady ? (
             <Button onClick={proceedToNextStep} className="w-full" size="lg">
               {step === "playerCount" ? "Next: Host or Join" : (hostJoin === "host" ? "Start Hosting" : "Join Game")}
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           ) : (
              <Button className="w-full" size="lg" disabled>
-              {step === "playerCount" ? "Select Player Count" : (hostJoin === 'join' ? "Enter Game ID" : "Choose an Option")}
+              {!isServerReady ? "Initializing Service..." : (step === "playerCount" ? "Select Player Count" : (hostJoin === 'join' ? "Enter Game ID" : "Choose an Option"))}
             </Button>
           )}
            <Button variant="link" onClick={() => router.push('/mode-select')} className="text-sm">
@@ -201,3 +224,4 @@ export default function MultiplayerSetupPage() {
     </div>
   );
 }
+
