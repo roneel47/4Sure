@@ -364,7 +364,10 @@ export default function MultiplayerPlayPage() {
   const turnPlayerDisplayName = gameState.currentTurnPlayerId ? (gameState.playersData[gameState.currentTurnPlayerId]?.displayName || gameState.currentTurnPlayerId) : "Someone";
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+       <Button onClick={handleExitGame} variant="outline" className="absolute top-0 right-0 z-20">
+         <LogOut className="mr-2 h-4 w-4" /> Exit Game
+       </Button>
        <div className={`text-center py-3 mb-4 rounded-lg bg-card shadow-md flex flex-col items-center ${gameState.currentTurnPlayerId === gameState.myPlayerId ? 'border-2 border-primary ring-2 ring-primary/50' : 'border border-border'}`}>
         {gameState.currentTurnPlayerId && (
             <TurnIndicator 
@@ -407,9 +410,6 @@ export default function MultiplayerPlayPage() {
              </Card>
         )}
       </div>
-       <Button onClick={handleExitGame} variant="outline" className="mt-6">
-         <LogOut className="mr-2 h-4 w-4" /> Exit Game
-       </Button>
     </div>
   );
 }
