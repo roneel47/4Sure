@@ -75,7 +75,8 @@ export default function MultiplayerPlayPage() {
         router.push(`/multiplayer-setup`); 
         return;
     }
-    console.log(`[MultiplayerPlay] Game ${gameId}: Found storedPlayerId: ${storedPlayerId}, Username: ${username}`);
+    const myDisplayName = username || storedPlayerId;
+    console.log(`[MultiplayerPlay] Game ${gameId}: Found storedPlayerId: ${storedPlayerId}, My Display Name: ${myDisplayName}`);
     
     const mySecretFromStorage = localStorage.getItem(`mySecret_${gameId}_${storedPlayerId}`);
     if (!mySecretFromStorage) {
@@ -83,7 +84,7 @@ export default function MultiplayerPlayPage() {
         router.push(`/multiplayer-secret-setup?gameId=${gameId}&playerCount=${playerCountParam}`);
         return;
     }
-    console.log(`[MultiplayerPlay] Game ${gameId}: Found secret for ${storedPlayerId}`);
+    console.log(`[MultiplayerPlay] Game ${gameId}: Found secret for ${myDisplayName}`);
 
     setGameState(prev => ({
         ...prev,
@@ -152,8 +153,9 @@ export default function MultiplayerPlayPage() {
                 if (data.targetMap) {
                     Object.keys(data.targetMap).forEach(pid => {
                         if (!initialPlayersData[pid]) { 
+                            const serverPlayer = prev.playersData[pid] || { displayName: pid }; // Get existing or default
                             initialPlayersData[pid] = { 
-                                displayName: prev.playersData[pid]?.displayName || pid, 
+                                displayName: serverPlayer.displayName, 
                                 guessesMade: [], 
                                 guessesAgainst: [] 
                             };
@@ -245,7 +247,7 @@ export default function MultiplayerPlayPage() {
         newSocket.disconnect();
         setSocket(null);
     };
-  }, [gameId, router, toast, playerCountParam, username, gameState.myPlayerId]); // Added gameState.myPlayerId to deps
+  }, [gameId, router, toast, playerCountParam, username, gameState.myPlayerId]); 
 
   useEffect(() => {
     let timerInterval: NodeJS.Timeout | undefined;
@@ -365,7 +367,7 @@ export default function MultiplayerPlayPage() {
 
   return (
     <div className="relative space-y-6">
-       <Button onClick={handleExitGame} variant="outline" className="absolute top-0 right-0 z-20">
+       <Button onClick={handleExitGame} variant="outline" className="absolute top-4 right-4 z-20">
          <LogOut className="mr-2 h-4 w-4" /> Exit Game
        </Button>
        <div className={`text-center py-3 mb-4 rounded-lg bg-card shadow-md flex flex-col items-center ${gameState.currentTurnPlayerId === gameState.myPlayerId ? 'border-2 border-primary ring-2 ring-primary/50' : 'border border-border'}`}>
@@ -405,8 +407,8 @@ export default function MultiplayerPlayPage() {
         )}
         {!opponentPlayerData && opponentId && gameState.gameStatus === 'IN_PROGRESS' && (
              <Card className="flex-1 w-full shadow-lg border-border">
-                <CardHeader><CardTitle>{gameState.playersData[opponentId]?.displayName || opponentId} (Disconnected)</CardTitle></CardHeader>
-                <CardContent><p className="text-muted-foreground text-center py-8">Opponent has disconnected.</p></CardContent>
+                <CardHeader><CardTitle>{(gameState.playersData[opponentId]?.displayName || opponentId) + (gameState.playersData[opponentId]?.socketId ? '' : ' (Disconnected)')}</CardTitle></CardHeader>
+                <CardContent><p className="text-muted-foreground text-center py-8">Opponent {(gameState.playersData[opponentId]?.socketId ? 'data unavailable' : 'has disconnected')}.</p></CardContent>
              </Card>
         )}
       </div>
