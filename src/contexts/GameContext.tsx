@@ -1,10 +1,10 @@
 
 "use client";
 import type React from 'react';
-import { createContext, useContext, useState, useCallback, useEffect }
+import { createContext, useContext, useState, useCallback, useEffect, useRef } // Added useRef
 from 'react';
 import useLocalStorage from '@/hooks/useLocalStorage';
-import type { Guess, GameStatus } from '@/types/game'; // Ensure GameStatus is imported if not already
+import type { Guess, GameStatus } from '@/types/game';
 import { useAuth } from './AuthContext';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -71,6 +71,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [timeLeft, setTimeLeft] = useState(INITIAL_TIME_LIMIT);
   const [isTimerActive, setIsTimerActive] = useState(false);
 
+  const gameStateRef = useRef(gameState);
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
 
   const setPlayerSecret = (secret: string[]) => {
     setPlayerSecretState(secret);
@@ -99,41 +104,38 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsTimerActive(false);
   }, [setPlayerSecretState, setOpponentSecretState, setGameState]);
 
-  // Effect to control timer start/stop/reset based on game state and turn
   useEffect(() => {
     if (gameState.gameStatus === 'PLAYING' && !gameState.winner) {
-      setTimeLeft(INITIAL_TIME_LIMIT); // Reset to 20 seconds
-      setIsTimerActive(true);       // Activate timer
+      setTimeLeft(INITIAL_TIME_LIMIT);
+      setIsTimerActive(true);
     } else {
-      setIsTimerActive(false);      // Deactivate if game not playing or winner exists
+      setIsTimerActive(false);
     }
   }, [gameState.currentTurn, gameState.gameStatus, gameState.winner]);
 
-  // Effect for the countdown mechanism
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
-    if (isTimerActive && timeLeft > 0 && gameState.gameStatus === 'PLAYING' && !gameState.winner) {
+    if (isTimerActive && timeLeft > 0 && gameStateRef.current.gameStatus === 'PLAYING' && !gameStateRef.current.winner) {
       intervalId = setInterval(() => {
-        setTimeLeft(prevTime => prevTime - 1);
+        setTimeLeft(prevTime => Math.max(0, prevTime - 1)); // Ensure timeLeft doesn't go below 0
       }, 1000);
-    } else if (timeLeft === 0 && isTimerActive && gameState.gameStatus === 'PLAYING' && !gameState.winner) {
-      // Time's up!
-      setIsTimerActive(false); // Stop this timer instance
+    } else if (timeLeft === 0 && isTimerActive && gameStateRef.current.gameStatus === 'PLAYING' && !gameStateRef.current.winner) {
+      setIsTimerActive(false); 
+      
+      const currentTurnPlayerName = gameStateRef.current.currentTurn === 'player' ? (username || 'Player') : 'Computer';
       toast({
         title: "Time's Up!",
-        description: `${gameState.currentTurn === 'player' ? (username || 'Player') : 'Computer'}'s turn was skipped.`,
+        description: `${currentTurnPlayerName}'s turn was skipped.`,
         variant: "destructive",
       });
 
-      // Switch turn (this will trigger the above useEffect to reset and start timer for the next turn)
-      if (gameState.currentTurn === 'player') {
-        setGameState(prev => ({ ...prev, currentTurn: 'opponent' }));
-      } else { // Opponent's turn timed out
-        setGameState(prev => ({ ...prev, currentTurn: 'player' }));
-      }
+      setGameState(prev => {
+        if (prev.gameStatus !== 'PLAYING' || prev.winner) return prev; // Check again inside updater
+        return { ...prev, currentTurn: prev.currentTurn === 'player' ? 'opponent' : 'player' };
+      });
     }
     return () => clearInterval(intervalId);
-  }, [isTimerActive, timeLeft, gameState.gameStatus, gameState.winner, gameState.currentTurn, username, setGameState, toast]);
+  }, [isTimerActive, timeLeft, username, setGameState, toast]); // Removed gameState.gameStatus and gameState.winner, using ref
 
 
   useEffect(() => {
@@ -142,7 +144,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else if (username && gameState.gameStatus === "WAITING_OPPONENT_SECRET" && !opponentSecret.some(d => d !== '')) {
       // Stay waiting
     }
-  }, [username, gameState.gameStatus, playerSecret, opponentSecret, initializeGame]);
+  }, [username, gameState.gameStatus, playerSecret, opponentSecret]);
 
 
   const submitPlayerSecret = useCallback(async (secret: string[]) => {
@@ -158,7 +160,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setGameState(prev => ({ ...prev, gameStatus: 'PLAYING', currentTurn: 'player' }));
     
     router.push('/play');
-
     toast({ title: "Secret set!", description: "Computer's secret also set. Game starts!" });
     
     await new Promise(resolve => setTimeout(resolve, 1500)); 
@@ -168,43 +169,60 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [setPlayerSecretState, setOpponentSecretState, setGameState, router, toast]);
 
   const simulateOpponentTurn = useCallback(async () => {
-    if (gameState.gameStatus !== 'PLAYING' || gameState.currentTurn !== 'opponent' || gameState.winner || isSubmitting) {
-      return;
-    }
-  
-    if (!playerSecret || playerSecret.length !== CODE_LENGTH || playerSecret.some(d => d === '' || d === undefined || d === null)) {
-      console.error('[GameContext] Opponent turn: Player secret is not properly set!', playerSecret);
-      setGameState(prev => ({ ...prev, currentTurn: 'player' })); 
-      toast({ title: "Game Error", description: "Player secret not found for Computer's turn. Your turn again.", variant: "destructive" });
+    if (gameStateRef.current.gameStatus !== 'PLAYING' || 
+        gameStateRef.current.currentTurn !== 'opponent' || 
+        gameStateRef.current.winner) {
+      setIsSubmitting(false);
       return;
     }
   
     setIsSubmitting(true);
-    
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500)); 
+
+    if (gameStateRef.current.gameStatus !== 'PLAYING' || 
+        gameStateRef.current.currentTurn !== 'opponent' || 
+        gameStateRef.current.winner) {
+      setIsSubmitting(false);
+      return;
+    }
   
-    const previousOpponentGuessValues = gameState.opponentGuesses.map(g => g.value);
+    const previousOpponentGuessValues = gameStateRef.current.opponentGuesses.map(g => g.value);
     const opponentGuessArray = generateComputerGuess(previousOpponentGuessValues);
     const opponentGuessStr = opponentGuessArray.join('');
+
+    if (!playerSecret || playerSecret.length !== CODE_LENGTH || playerSecret.some(d => d === '' || d === undefined || d === null)) {
+      console.error('[GameContext] Opponent turn: Player secret is not properly set for feedback!', playerSecret);
+      setGameState(prev => {
+        if (prev.gameStatus !== 'PLAYING' || prev.winner) return prev;
+        return { ...prev, currentTurn: 'player' };
+      });
+      toast({ title: "Game Error", description: "Player secret not found for Computer's turn. Your turn again.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
     const feedback = calculateFeedback(opponentGuessArray, playerSecret);
     const newOpponentGuess: Guess = { value: opponentGuessStr, feedback };
   
-    const updatedOpponentGuesses = [...gameState.opponentGuesses, newOpponentGuess];
-    
-    toast({ title: "Computer guessed!", description: `Computer guessed ${opponentGuessStr}`});
+    setGameState(prev => {
+      if (prev.gameStatus !== 'PLAYING' || prev.currentTurn !== 'opponent' || prev.winner) {
+        return prev; 
+      }
+      const updatedOpponentGuesses = [...prev.opponentGuesses, newOpponentGuess];
+      toast({ title: "Computer guessed!", description: `Computer guessed ${opponentGuessStr}`});
   
-    if (checkWin(feedback)) {
-      setGameState(prev => ({ ...prev, opponentGuesses: updatedOpponentGuesses, gameStatus: 'GAME_OVER', winner: 'opponent' }));
-      toast({ title: "Oh no!", description: "Computer guessed your number!" });
-    } else {
-      setGameState(prev => ({ ...prev, opponentGuesses: updatedOpponentGuesses, currentTurn: 'player' }));
-    }
+      if (checkWin(feedback)) {
+        toast({ title: "Oh no!", description: "Computer guessed your number!" });
+        return { ...prev, opponentGuesses: updatedOpponentGuesses, gameStatus: 'GAME_OVER', winner: 'opponent' };
+      } else {
+        return { ...prev, opponentGuesses: updatedOpponentGuesses, currentTurn: 'player' };
+      }
+    });
     setIsSubmitting(false); 
-  }, [gameState, playerSecret, setGameState, toast, isSubmitting]);
+  }, [playerSecret, setGameState, toast]);
 
 
   const makePlayerGuess = useCallback(async (guessStr: string) => {
-    if (gameState.gameStatus !== 'PLAYING' || gameState.currentTurn !== 'player' || isSubmitting) return;
+    if (gameStateRef.current.gameStatus !== 'PLAYING' || gameStateRef.current.currentTurn !== 'player' || isSubmitting) return;
     
     setIsSubmitting(true);
 
@@ -212,38 +230,45 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const feedback = calculateFeedback(guessArray, opponentSecret);
     const newPlayerGuess: Guess = { value: guessStr, feedback };
     
-    const updatedPlayerGuesses = [...gameState.playerGuesses, newPlayerGuess];
-
-    if (checkWin(feedback)) {
-      setGameState(prev => ({ ...prev, playerGuesses: updatedPlayerGuesses, gameStatus: 'GAME_OVER', winner: 'player' }));
-      toast({ title: "Congratulations!", description: "You guessed the Computer's number!" });
-    } else {
-      setGameState(prev => ({ ...prev, playerGuesses: updatedPlayerGuesses, currentTurn: 'opponent' }));
-    }
+    setGameState(prev => {
+      if (prev.gameStatus !== 'PLAYING' || prev.currentTurn !== 'player' || prev.winner) {
+        return prev;
+      }
+      const updatedPlayerGuesses = [...prev.playerGuesses, newPlayerGuess];
+      if (checkWin(feedback)) {
+        toast({ title: "Congratulations!", description: "You guessed the Computer's number!" });
+        return { ...prev, playerGuesses: updatedPlayerGuesses, gameStatus: 'GAME_OVER', winner: 'player' };
+      } else {
+        return { ...prev, playerGuesses: updatedPlayerGuesses, currentTurn: 'opponent' };
+      }
+    });
     setIsSubmitting(false); 
-  }, [gameState, opponentSecret, setGameState, toast, isSubmitting]);
+  }, [opponentSecret, setGameState, toast, isSubmitting]);
 
-  // This useEffect handles initiating the opponent's turn logic when it becomes their turn.
-  // The timer itself is managed by other effects (countdown and start/reset).
   useEffect(() => {
+    let thinkDelayTimeoutId: NodeJS.Timeout | undefined;
     if (
       gameState.gameStatus === 'PLAYING' &&
       gameState.currentTurn === 'opponent' &&
-      !gameState.winner &&
-      !isSubmitting 
+      !gameState.winner
     ) {
-      const thinkDelay = setTimeout(() => {
+      thinkDelayTimeoutId = setTimeout(() => {
         simulateOpponentTurn();
       }, 750); 
-      return () => clearTimeout(thinkDelay);
     }
-  }, [gameState.currentTurn, gameState.gameStatus, gameState.winner, isSubmitting, simulateOpponentTurn]);
+    return () => {
+      if (thinkDelayTimeoutId) {
+        clearTimeout(thinkDelayTimeoutId);
+      }
+    };
+  }, [gameState.currentTurn, gameState.gameStatus, gameState.winner, simulateOpponentTurn]);
 
 
   const exitGame = useCallback(() => {
+    initializeGame(); // Call this first to reset GameContext state
     authLogout(); 
     toast({ title: "Game Exited", description: "Your game data has been cleared." });
-  }, [authLogout, toast]);
+  }, [authLogout, initializeGame, toast]);
 
 
   return (
@@ -276,5 +301,3 @@ export const useGame = (): GameContextType => {
   }
   return context;
 };
-
-    
