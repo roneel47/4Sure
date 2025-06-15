@@ -38,7 +38,7 @@ export interface GameRoom {
   targetMap?: { [playerId: string]: string }; // Who is guessing whose secret
   winner?: string; // playerId of the winner
   createdAt: Date; // For TTL index and tracking
-  // turnStartedAt?: number; // Optional: Timestamp when the current turn began, managed by server.
+  inProgressSince?: Date; // Timestamp for when the game moved to IN_PROGRESS
 }
 
 // Structure for the in-memory store on the server (if not using DB for everything)
@@ -53,3 +53,4 @@ export interface TurnUpdateData {
     nextPlayerId: string;
     reason?: 'guess' | 'timeout';
 }
+
