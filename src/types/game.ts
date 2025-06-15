@@ -27,7 +27,6 @@ export interface PlayerData {
   guessesAgainst?: Guess[];
   hasSetSecret: boolean;   // True if this player has submitted their secret data
   isReady: boolean;          // True if player has confirmed their secret and is ready for game to start
-  // displayName might be added later, for now, playerId (player1, player2) serves as identifier
 }
 
 export interface GameRoom {
@@ -39,10 +38,18 @@ export interface GameRoom {
   targetMap?: { [playerId: string]: string }; // Who is guessing whose secret
   winner?: string; // playerId of the winner
   createdAt: Date; // For TTL index and tracking
+  // turnStartedAt?: number; // Optional: Timestamp when the current turn began, managed by server.
 }
 
 // Structure for the in-memory store on the server (if not using DB for everything)
 // This is more of a conceptual type if we were using in-memory stores, MongoDB handles this.
 export interface GameRoomsStore {
   [gameId: string]: GameRoom;
+}
+
+// For turn-update event data
+export interface TurnUpdateData {
+    gameId: string;
+    nextPlayerId: string;
+    reason?: 'guess' | 'timeout';
 }
