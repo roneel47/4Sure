@@ -52,6 +52,7 @@ export default function ModeSelectPage() {
             onClick={() => router.push('/multiplayer-setup')} 
             className="w-full" 
             size="lg"
+            variant="outline" // Changed from default to outline
           >
             <Users className="mr-2 h-5 w-5" /> Multiplayer
             <ArrowRight className="ml-auto h-5 w-5" />
@@ -61,3 +62,4 @@ export default function ModeSelectPage() {
     </main>
   );
 }
+
