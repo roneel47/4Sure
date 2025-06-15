@@ -18,9 +18,9 @@ export default function MultiplayerSetupPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState<MultiplayerStep>("playerCount");
-  const [playerCount, setPlayerCount] = useState<PlayerCount>("duo"); // Default to duo for smoother testing
+  const [playerCount, setPlayerCount] = useState<PlayerCount>("duo");
   const [hostJoin, setHostJoin] = useState<HostJoin>(null);
-  const [gameId, setGameId] = useState<string>("");
+  const [gameIdInput, setGameIdInput] = useState<string>(""); // Renamed from gameId to avoid confusion
   const [generatedGameId, setGeneratedGameId] = useState<string | null>(null);
 
   const handlePlayerCountSelect = (value: string) => {
@@ -32,9 +32,8 @@ export default function MultiplayerSetupPage() {
     if (value === "host") {
       const newGameId = `GAME${Math.floor(1000 + Math.random() * 9000)}`;
       setGeneratedGameId(newGameId);
-      setGameId(newGameId); // Also set gameId for consistency if they switch back and forth
     } else {
-      setGeneratedGameId(null); // Clear generated if switching to join
+      setGeneratedGameId(null);
     }
   };
 
@@ -42,9 +41,11 @@ export default function MultiplayerSetupPage() {
     if (step === "playerCount" && playerCount) {
       setStep("hostJoin");
     } else if (step === "hostJoin" && hostJoin) {
-      const finalGameId = hostJoin === 'host' ? generatedGameId : gameId;
+      const finalGameId = hostJoin === 'host' ? generatedGameId : gameIdInput;
       if (finalGameId && playerCount) {
-        router.push(`/multiplayer-secret-setup?gameId=${finalGameId.toUpperCase()}&playerCount=${playerCount}`);
+        // For host, pass isHost=true
+        const isHostQueryParam = hostJoin === 'host' ? '&isHost=true' : '';
+        router.push(`/multiplayer-secret-setup?gameId=${finalGameId.toUpperCase()}&playerCount=${playerCount}${isHostQueryParam}`);
       } else {
         toast({
           title: "Setup Incomplete",
@@ -60,7 +61,7 @@ export default function MultiplayerSetupPage() {
       setStep("playerCount");
       setHostJoin(null);
       setGeneratedGameId(null);
-      setGameId(""); // Reset gameId when going back to player count selection
+      setGameIdInput("");
     } else if (step === "playerCount") {
       router.push('/mode-select');
     }
@@ -159,8 +160,8 @@ export default function MultiplayerSetupPage() {
               <Input 
                 id="game-id-input" 
                 placeholder="e.g., GAME1234" 
-                value={gameId} 
-                onChange={(e) => setGameId(e.target.value.toUpperCase())}
+                value={gameIdInput} 
+                onChange={(e) => setGameIdInput(e.target.value.toUpperCase())}
                 className="text-center tracking-wider"
               />
             </div>
@@ -171,8 +172,10 @@ export default function MultiplayerSetupPage() {
               <CardDescription>Share this Game ID with others:</CardDescription>
               <CardTitle className="text-2xl text-primary font-mono tracking-widest py-2">{generatedGameId}</CardTitle>
               <Button variant="outline" size="sm" onClick={() => {
-                  navigator.clipboard.writeText(generatedGameId);
-                  toast({title: "Copied!", description: "Game ID copied to clipboard."})
+                  if(generatedGameId) {
+                    navigator.clipboard.writeText(generatedGameId);
+                    toast({title: "Copied!", description: "Game ID copied to clipboard."})
+                  }
                 }}>Copy ID</Button>
             </Card>
           )}
@@ -180,7 +183,7 @@ export default function MultiplayerSetupPage() {
         </CardContent>
 
         <CardFooter className="flex flex-col gap-4">
-           {(step === "playerCount" && playerCount) || (step === "hostJoin" && hostJoin && (hostJoin === 'host' || (hostJoin === 'join' && gameId))) ? (
+           {(step === "playerCount" && playerCount) || (step === "hostJoin" && hostJoin && (hostJoin === 'host' || (hostJoin === 'join' && gameIdInput))) ? (
             <Button onClick={proceedToNextStep} className="w-full" size="lg">
               {step === "playerCount" ? "Next: Host or Join" : (hostJoin === "host" ? "Start Hosting" : "Join Game")}
               <ArrowRight className="ml-2 h-5 w-5" />
@@ -198,4 +201,3 @@ export default function MultiplayerSetupPage() {
     </div>
   );
 }
-

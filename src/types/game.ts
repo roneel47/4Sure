@@ -4,43 +4,45 @@ export interface Guess {
   feedback: boolean[]; // Array of 4 booleans, true if digit is in correct position
 }
 
-export type GameStatus =
-  | "SETUP_PLAYER" // Player needs to set their secret (single player)
-  | "WAITING_OPPONENT_SECRET" // Player secret set, waiting for opponent (single player)
-  | "PLAYING" // Game is in progress (single player)
-  | "GAME_OVER"; // Game has ended (single player)
+// Single Player Game Status
+export type SinglePlayerGameStatus =
+  | "SETUP_PLAYER"
+  | "WAITING_OPPONENT_SECRET"
+  | "PLAYING"
+  | "GAME_OVER";
 
-// Multiplayer Specific Types
+// Multiplayer Game Status
 export type MultiplayerGameStatus =
-  | "WAITING_FOR_PLAYERS"      // Initial state, room created, waiting for enough players
-  | "WAITING_FOR_READY"        // All player slots are filled, waiting for players to set secrets
-  | "READY_TO_START"           // All connected players have set secrets, player1 can initiate start
+  | "UNKNOWN"                  // Initial state before any server interaction
+  | "WAITING_FOR_PLAYERS"      // Room created, waiting for enough players (e.g., host is player1, waiting for player2)
+  | "WAITING_FOR_READY"        // All player slots are filled, waiting for all players to set secrets
+  | "READY_TO_START"           // All connected players have set secrets, player1 (host) can initiate start
   | "IN_PROGRESS"              // Game is actively being played
   | "GAME_OVER";               // Game has concluded
 
 export interface PlayerData {
-  socketId?: string; // Optional: can be undefined if player disconnected
+  socketId?: string;        // Optional: can be undefined if player disconnected
   secret?: string[];
   guessesMade?: Guess[];
   guessesAgainst?: Guess[];
-  hasSetSecret?: boolean; // True if this player has submitted their secret data
-  isReady?: boolean;      // True if player has confirmed their secret and is ready for game to start
-  // displayName?: string; // Future enhancement
+  hasSetSecret: boolean;   // True if this player has submitted their secret data
+  isReady: boolean;          // True if player has confirmed their secret and is ready for game to start
+  // displayName might be added later, for now, playerId (player1, player2) serves as identifier
 }
 
 export interface GameRoom {
   gameId: string;
-  playerCount: number; 
-  players: { [playerId: string]: PlayerData }; 
+  playerCount: number;
+  players: { [playerId: string]: PlayerData }; // e.g., { "player1": PlayerData, "player2": PlayerData }
   status: MultiplayerGameStatus;
-  turn?: string; 
-  targetMap?: { [playerId: string]: string }; 
-  winner?: string; 
-  createdAt?: Date; // For TTL index
+  turn?: string; // playerId of whose turn it is
+  targetMap?: { [playerId: string]: string }; // Who is guessing whose secret
+  winner?: string; // playerId of the winner
+  createdAt: Date; // For TTL index and tracking
 }
 
 // Structure for the in-memory store on the server (if not using DB for everything)
+// This is more of a conceptual type if we were using in-memory stores, MongoDB handles this.
 export interface GameRoomsStore {
   [gameId: string]: GameRoom;
 }
-
