@@ -1,6 +1,6 @@
 # 4Sure - NumberLock Duel
 
-**Repository**: [https://github.com/roneel47/4Sure_Publish](https://github.com/roneel47/4Sure_Publish)
+**Repository**: [https://github.com/roneel47/4Sure_Publish](https://github.com/roneel47/4Sure)
 
 4Sure is a turn-based number guessing game. It supports both Player vs. Computer (single player) and Player vs. Player (multiplayer) modes. Each player sets a secret 4-digit code, and then players take turns guessing their opponent's code. The first player to guess the opponent's code wins!
 
@@ -31,8 +31,8 @@ To get started with the application:
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/roneel47/4Sure_Publish.git
-    cd 4Sure_Publish
+    git clone https://github.com/roneel47/4Sure.git
+    cd 4Sure
     ```
 
 2.  **Install dependencies**:
@@ -143,7 +143,7 @@ Detailed "How to Play" instructions for both Single Player and Multiplayer modes
 
 This project was developed primarily as a demonstration and learning exercise. While contributions are not actively sought, feel free to fork the repository, explore the code, and adapt it for your own learning or projects.
 
-If you find issues or have suggestions, you can open an issue on the [GitHub repository](https://github.com/roneel47/4Sure_Publish/issues).
+If you find issues or have suggestions, you can open an issue on the [GitHub repository](https://github.com/roneel47/4Sure/issues).
 
 ## License
 
