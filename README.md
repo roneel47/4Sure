@@ -1,6 +1,6 @@
 # 4Sure - NumberLock Duel
 
-**Repository**: [https://github.com/roneel47/4Sure_Publish](https://github.com/roneel47/4Sure)
+**Repository**: [https://github.com/roneel47/4Sure](https://github.com/roneel47/4Sure)
 
 4Sure is a turn-based number guessing game. It supports both Player vs. Computer (single player) and Player vs. Player (multiplayer) modes. Each player sets a secret 4-digit code, and then players take turns guessing their opponent's code. The first player to guess the opponent's code wins!
 
